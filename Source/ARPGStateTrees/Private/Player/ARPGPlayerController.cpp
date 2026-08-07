@@ -20,7 +20,10 @@ void AARPGPlayerController::BeginPlay()
 	bShowMouseCursor = true;
 	DefaultMouseCursor = EMouseCursor::Default;
 
-	SetInputMode(FInputModeGameOnly());
+	FInputModeGameAndUI InputMode;
+	InputMode.SetHideCursorDuringCapture(false);
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(InputMode);
 
 	if (const ULocalPlayer* LocalPlayer = GetLocalPlayer())
 	{
@@ -28,7 +31,7 @@ void AARPGPlayerController::BeginPlay()
 		{
 			if (PlayerMappingContext)
 			{
-				InputSubsystem->AddMappingContext(PlayerMappingContext,0);
+				InputSubsystem->AddMappingContext(PlayerMappingContext, 0);
 			}
 		}
 	}
@@ -50,22 +53,50 @@ void AARPGPlayerController::SetupInputComponent()
 		return;
 	}
 
-	EnhancedInputComponent->BindAction(MoveToAction, ETriggerEvent::Started,	this, &AARPGPlayerController::OnMoveStarted);
-	EnhancedInputComponent->BindAction(MoveToAction, ETriggerEvent::Triggered, this, &AARPGPlayerController::OnMoveTriggered);
+	EnhancedInputComponent->BindAction(MoveToAction, ETriggerEvent::Started, this, &AARPGPlayerController::OnMoveStarted);
+	EnhancedInputComponent->BindAction(MoveToAction, ETriggerEvent::Completed, this, &AARPGPlayerController::OnMoveEnded);
+	EnhancedInputComponent->BindAction(MoveToAction, ETriggerEvent::Canceled, this, &AARPGPlayerController::OnMoveEnded);
+}
+
+void AARPGPlayerController::SetPawn(APawn* InPawn)
+{
+	Super::SetPawn(InPawn);
+
+	NavigationComponent.Reset();
+
+	if (const AARPGCharacter* ARPGCharacter = Cast<AARPGCharacter>(InPawn))
+	{
+		NavigationComponent = ARPGCharacter->GetARPGNavigationComponent();
+	}
 }
 
 void AARPGPlayerController::OnMoveStarted(const FInputActionValue&)
 {
 	RequestCursorMove(false);
+
+	GetWorldTimerManager().ClearTimer(HeldMoveTimerHandle);
+	GetWorldTimerManager().SetTimer(HeldMoveTimerHandle, this, &AARPGPlayerController::UpdateHeldMove, HeldMoveUpdateInterval, true);
 }
 
-void AARPGPlayerController::OnMoveTriggered(const FInputActionValue&)
+void AARPGPlayerController::OnMoveEnded(const FInputActionValue&)
+{
+	GetWorldTimerManager().ClearTimer(HeldMoveTimerHandle);
+}
+
+void AARPGPlayerController::UpdateHeldMove()
 {
 	RequestCursorMove(true);
 }
 
 void AARPGPlayerController::RequestCursorMove(const bool bContinuousUpdate) const
 {
+	UARPGNavigationComponent* CachedNavigationComponent = NavigationComponent.Get();
+
+	if (!CachedNavigationComponent)
+	{
+		return;
+	}
+
 	FVector WorldLocation;
 
 	if (!ResolveCursorWorldLocation(WorldLocation))
@@ -73,29 +104,13 @@ void AARPGPlayerController::RequestCursorMove(const bool bContinuousUpdate) cons
 		return;
 	}
 
-	AARPGCharacter* ARPGCharacter =
-		Cast<AARPGCharacter>(GetPawn());
-
-	if (!ARPGCharacter)
-	{
-		return;
-	}
-
-	UARPGNavigationComponent* NavigationComponent =
-		ARPGCharacter->GetARPGNavigationComponent();
-
-	if (!NavigationComponent)
-	{
-		return;
-	}
-
 	if (bContinuousUpdate)
 	{
-		NavigationComponent->UpdateMoveDestination(WorldLocation);
+		CachedNavigationComponent->UpdateMoveDestination(WorldLocation);
 	}
 	else
 	{
-		NavigationComponent->RequestMoveToLocation(WorldLocation);
+		CachedNavigationComponent->RequestMoveToLocation(WorldLocation);
 	}
 }
 
@@ -103,17 +118,11 @@ bool AARPGPlayerController::ResolveCursorWorldLocation(FVector& OutWorldLocation
 {
 	FHitResult CursorHit;
 
-	if (!GetHitResultUnderCursor(ECC_Visibility, false, CursorHit))
-	{
-		return false;
-	}
-
-	if (!CursorHit.bBlockingHit)
+	if (!GetHitResultUnderCursor(ECC_Visibility, false, CursorHit) || !CursorHit.bBlockingHit)
 	{
 		return false;
 	}
 
 	OutWorldLocation = CursorHit.ImpactPoint;
-
 	return true;
 }

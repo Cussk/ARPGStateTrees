@@ -21,6 +21,7 @@ AARPGCharacter::AARPGCharacter()
 	NavigationComponent = CreateDefaultSubobject<UARPGNavigationComponent>(TEXT("NavigationComponent"));
 	
 	SpringArmComponent->TargetArmLength = 900.0f;
+	SpringArmComponent->SetUsingAbsoluteRotation(true);
 	SpringArmComponent->SetRelativeRotation( FRotator( -55.0f, 0.0f, 0.0f ));
 	SpringArmComponent->bDoCollisionTest = false;
 	SpringArmComponent->bEnableCameraLag = false;

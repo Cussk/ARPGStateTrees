@@ -47,7 +47,7 @@ private:
 	bool TryBuildPath(const FVector& WorldDestination);
 	bool ShouldUpdateDestination(const FVector& WorldDestination) const;
 
-	void RecordDestinationRequest(const FVector& WorldDestination);
+	void RecordDestinationRequest();
 	void AdvancePathIfNeeded();
 	void CompleteNavigation();
 
@@ -59,9 +59,6 @@ private:
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Navigation|Path Finding")
 	FVector NavigationProjectionExtent = FVector(100.0f, 100.0f, 250.0f);
-	
-	UPROPERTY(EditDefaultsOnly, Category = "Navigation|Continuous Update", meta = (ClampMin = "0.0"))
-	float MinimumDestinationUpdateInterval = 0.10f;
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Navigation|Continuous Update", meta = (ClampMin = "0.0"))
 	float DestinationChangeThreshold = 75.0f;
@@ -78,8 +75,6 @@ private:
 
 	FVector LastRequestedDestination = FVector::ZeroVector;
 	FVector ResolvedDestination = FVector::ZeroVector;
-
-	double LastDestinationRequestTime = 0.0;
 
 	bool bHasDestinationRequest = false;
 };

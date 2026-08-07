@@ -81,41 +81,47 @@ bool UARPGNavigationComponent::RequestMoveToLocation(const FVector& WorldDestina
 		return false;
 	}
 
-	RecordDestinationRequest(WorldDestination);
-
 	if (!TryBuildPath(WorldDestination))
 	{
-		// A new click takes precedence over the player's previous intent.
 		CancelNavigation();
 		return false;
 	}
 
+	RecordDestinationRequest();
 	return true;
 }
 
 bool UARPGNavigationComponent::UpdateMoveDestination(const FVector& WorldDestination)
 {
-	if (!OwnerCharacter || !OwnerCharacter->IsLocallyControlled())
+	if (!OwnerCharacter || !OwnerCharacter->IsLocallyControlled() || !ShouldUpdateDestination(WorldDestination))
 	{
 		return false;
 	}
 
-	if (!ShouldUpdateDestination(WorldDestination))
+	if (!TryBuildPath(WorldDestination))
 	{
 		return false;
 	}
 
-	RecordDestinationRequest(WorldDestination);
+	RecordDestinationRequest();
+	return true;
+}
 
-	// Unlike a discrete click, an invalid held-movement update should not
-	// destroy an otherwise valid current path.
-	return TryBuildPath(WorldDestination);
+bool UARPGNavigationComponent::ShouldUpdateDestination(const FVector& WorldDestination) const
+{
+	if (!bHasDestinationRequest)
+	{
+		return true;
+	}
+
+	return FVector::DistSquared2D(WorldDestination, LastRequestedDestination) >= FMath::Square(DestinationChangeThreshold);
 }
 
 void UARPGNavigationComponent::CancelNavigation()
 {
 	PathPoints.Reset();
 	CurrentPathPointIndex = INDEX_NONE;
+	bHasDestinationRequest = false;
 
 	SetComponentTickEnabled(false);
 }
@@ -196,47 +202,10 @@ bool UARPGNavigationComponent::TryBuildPath(const FVector& WorldDestination)
 	return true;
 }
 
-bool UARPGNavigationComponent::ShouldUpdateDestination(
-	const FVector& WorldDestination) const
+void UARPGNavigationComponent::RecordDestinationRequest()
 {
-	if (!bHasDestinationRequest)
-	{
-		return true;
-	}
-
-	const UWorld* World = GetWorld();
-
-	if (!World)
-	{
-		return false;
-	}
-
-	const double TimeSinceLastRequest =
-		World->GetTimeSeconds() - LastDestinationRequestTime;
-
-	if (TimeSinceLastRequest < MinimumDestinationUpdateInterval)
-	{
-		return false;
-	}
-
-	const float DistanceSquared =
-		FVector::DistSquared2D(
-			WorldDestination,
-			LastRequestedDestination);
-
-	return DistanceSquared >= FMath::Square(DestinationChangeThreshold);
-}
-
-void UARPGNavigationComponent::RecordDestinationRequest(
-	const FVector& WorldDestination)
-{
-	LastRequestedDestination = WorldDestination;
+	LastRequestedDestination = ResolvedDestination;
 	bHasDestinationRequest = true;
-
-	if (const UWorld* World = GetWorld())
-	{
-		LastDestinationRequestTime = World->GetTimeSeconds();
-	}
 }
 
 void UARPGNavigationComponent::AdvancePathIfNeeded()
