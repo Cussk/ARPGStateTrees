@@ -6,6 +6,7 @@
 #include "GameFramework/Character.h"
 #include "ARPGCharacter.generated.h"
 
+class UARPGNavigationComponent;
 class UCameraComponent;
 class USpringArmComponent;
 
@@ -16,14 +17,18 @@ class ARPGSTATETREES_API AARPGCharacter : public ACharacter
 
 public:
 	AARPGCharacter();
-
-protected:
 	virtual void BeginPlay() override;
 	
-private:
-	UPROPERTY(EditAnywhere, Category = "Camera")
-	USpringArmComponent* SpringArmComponent;
+	UFUNCTION(BlueprintPure)
+	UARPGNavigationComponent* GetARPGNavigationComponent() const;
+
+protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
+	TObjectPtr<USpringArmComponent> SpringArmComponent;
 	
-	UPROPERTY(EditAnywhere, Category = "Camera")
-	UCameraComponent* CameraComponent;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
+	TObjectPtr<UCameraComponent> CameraComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Navigation")
+	TObjectPtr<UARPGNavigationComponent> NavigationComponent;
 };
