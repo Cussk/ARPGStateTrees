@@ -27,11 +27,12 @@ void UARPGCombatCoordinationComponent::EndPlay(const EEndPlayReason::Type EndPla
 		if (UARPGCombatantComponent* Attacker = WeakAttacker.Get())
 		{
 			Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
-			Attacker->SetAttackPermission(false);
 		}
 	}
 
 	Attackers.Reset();
+	CoordinatedAttackers.Reset();
+	Assignments.Reset();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -50,15 +51,6 @@ void UARPGCombatCoordinationComponent::RegisterAttacker(UARPGCombatantComponent*
 	{
 		StartCoordination();
 	}
-
-	if (bFieldInitialized)
-	{
-		RebuildAssignments();
-	}
-	else
-	{
-		RequestFieldRefresh();
-	}
 }
 
 void UARPGCombatCoordinationComponent::UnregisterAttacker(UARPGCombatantComponent* Attacker)
@@ -68,54 +60,65 @@ void UARPGCombatCoordinationComponent::UnregisterAttacker(UARPGCombatantComponen
 		return;
 	}
 
+	CoordinatedAttackers.Remove(Attacker);
+	Assignments.Remove(Attacker);
+
 	Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
-	Attacker->SetAttackPermission(false);
 
 	bAssignmentsDirty = true;
 
 	if (Attackers.IsEmpty())
 	{
 		StopCoordination();
-		return;
 	}
-
-	RebuildAssignments();
 }
 
 void UARPGCombatCoordinationComponent::StartCoordination()
 {
 	UpdateCoordination();
-	GetWorld()->GetTimerManager().SetTimer(CoordinationTimer, this, &UARPGCombatCoordinationComponent::UpdateCoordination, CoordinationInterval, true);
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(CoordinationTimer, this, &UARPGCombatCoordinationComponent::UpdateCoordination,
+			CoordinationInterval, true);
+	}
 }
 
 void UARPGCombatCoordinationComponent::StopCoordination()
 {
-	if (GetWorld())
+	if (UWorld* World = GetWorld())
 	{
-		GetWorld()->GetTimerManager().ClearTimer(CoordinationTimer);
+		World->GetTimerManager().ClearTimer(CoordinationTimer);
+	}
+
+	if (ActiveQueryId != INDEX_NONE)
+	{
+		if (UEnvQueryManager* QueryManager = UEnvQueryManager::GetCurrent(this))
+		{
+			QueryManager->AbortQuery(ActiveQueryId);
+		}
+
+		ActiveQueryId = INDEX_NONE;
 	}
 
 	Candidates.Reset();
+	Assignments.Reset();
+	CoordinatedAttackers.Reset();
 
-	ActiveQueryId = INDEX_NONE;
 	bFieldInitialized = false;
 	bAssignmentsDirty = false;
 }
 
 void UARPGCombatCoordinationComponent::UpdateCoordination()
 {
-	if (!TargetActor || Attackers.IsEmpty())
+	if (!IsValid(TargetActor) || Attackers.IsEmpty())
 	{
 		return;
 	}
 
-	for (auto Iterator = Attackers.CreateIterator(); Iterator; ++Iterator)
+	if (UpdateCoordinatedAttackers())
 	{
-		if (!Iterator->IsValid())
-		{
-			Iterator.RemoveCurrent();
-			bAssignmentsDirty = true;
-		}
+		bAssignmentsDirty = true;
 	}
 
 	if (Attackers.IsEmpty())
@@ -124,32 +127,80 @@ void UARPGCombatCoordinationComponent::UpdateCoordination()
 		return;
 	}
 
-	const bool bTargetMoved = FVector::DistSquared2D(TargetActor->GetActorLocation(), LastQueryOrigin) >= FMath::Square(FieldRefreshDistance);
+	if (CoordinatedAttackers.IsEmpty())
+	{
+		return;
+	}
 
-	if (!bFieldInitialized || bTargetMoved)
+	if (!bFieldInitialized)
 	{
 		RequestFieldRefresh();
 		return;
 	}
 
-	if (bAssignmentsDirty)
+	UpdateAssignmentGoals();
+
+	const bool bFieldStale = FVector::DistSquared2D(TargetActor->GetActorLocation(), FieldOrigin)
+		>= FMath::Square(FieldRefreshDistance);
+
+	if (bFieldStale)
 	{
-		RebuildAssignments();
-		return;
+		RequestFieldRefresh();
 	}
 
-	TArray<UARPGCombatantComponent*> ValidAttackers;
-	ValidAttackers.Reserve(Attackers.Num());
-
-	for (const TWeakObjectPtr<UARPGCombatantComponent>& WeakAttacker : Attackers)
+	if (bAssignmentsDirty && !bFieldStale)
 	{
-		if (UARPGCombatantComponent* Attacker = WeakAttacker.Get())
+		RebuildAssignments();
+	}
+}
+
+bool UARPGCombatCoordinationComponent::UpdateCoordinatedAttackers()
+{
+	if (!IsValid(TargetActor))
+	{
+		return false;
+	}
+
+	const FVector TargetLocation = TargetActor->GetActorLocation();
+	bool bChanged = false;
+
+	for (auto Iterator = Attackers.CreateIterator(); Iterator; ++Iterator)
+	{
+		UARPGCombatantComponent* Attacker = Iterator->Get();
+
+		if (!IsValid(Attacker) || !IsValid(Attacker->GetCombatantActor()))
 		{
-			ValidAttackers.Add(Attacker);
+			CoordinatedAttackers.Remove(*Iterator);
+			Assignments.Remove(*Iterator);
+			Iterator.RemoveCurrent();
+			bChanged = true;
+			continue;
+		}
+
+		const float DistanceSquared = FVector::DistSquared2D(TargetLocation, Attacker->GetCombatantActor()->GetActorLocation());
+		const bool bIsCoordinated = CoordinatedAttackers.Contains(Attacker);
+
+		if (bIsCoordinated)
+		{
+			if (DistanceSquared > FMath::Square(CoordinationDeactivationRadius))
+			{
+				CoordinatedAttackers.Remove(Attacker);
+				Assignments.Remove(Attacker);
+				Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
+				bChanged = true;
+			}
+
+			continue;
+		}
+
+		if (DistanceSquared <= FMath::Square(CoordinationActivationRadius))
+		{
+			CoordinatedAttackers.Add(Attacker);
+			bChanged = true;
 		}
 	}
 
-	UpdateAttackPermissions(ValidAttackers);
+	return bChanged;
 }
 
 void UARPGCombatCoordinationComponent::RequestFieldRefresh()
@@ -159,6 +210,8 @@ void UARPGCombatCoordinationComponent::RequestFieldRefresh()
 		return;
 	}
 
+	PendingQueryOrigin = TargetActor->GetActorLocation();
+
 	FEnvQueryRequest QueryRequest(EngagementQuery, TargetActor);
 	ActiveQueryId = QueryRequest.Execute(EEnvQueryRunMode::AllMatching, this, &UARPGCombatCoordinationComponent::OnFieldQueryFinished);
 }
@@ -167,7 +220,7 @@ void UARPGCombatCoordinationComponent::OnFieldQueryFinished(TSharedPtr<FEnvQuery
 {
 	ActiveQueryId = INDEX_NONE;
 
-	if (!Result.IsValid() || !Result->IsSuccessful() || !TargetActor)
+	if (!Result.IsValid() || !Result->IsSuccessful() || !IsValid(TargetActor) || Attackers.IsEmpty())
 	{
 		return;
 	}
@@ -179,10 +232,9 @@ void UARPGCombatCoordinationComponent::OnFieldQueryFinished(TSharedPtr<FEnvQuery
 	{
 		FARPGCoordinationCandidate& Candidate = Candidates.AddDefaulted_GetRef();
 		Candidate.Location = Result->GetItemAsLocation(Index);
-		Candidate.Score = Result->GetItemScore(Index);
 	}
 
-	LastQueryOrigin = TargetActor->GetActorLocation();
+	FieldOrigin = PendingQueryOrigin;
 	bFieldInitialized = true;
 	bAssignmentsDirty = true;
 
@@ -191,103 +243,258 @@ void UARPGCombatCoordinationComponent::OnFieldQueryFinished(TSharedPtr<FEnvQuery
 
 void UARPGCombatCoordinationComponent::RebuildAssignments()
 {
-	if (!IsValid(TargetActor) || Candidates.IsEmpty())
+	if (!IsValid(TargetActor))
 	{
 		return;
 	}
 
 	TArray<UARPGCombatantComponent*> SortedAttackers;
+	SortedAttackers.Reserve(CoordinatedAttackers.Num());
 
-	for (const TWeakObjectPtr<UARPGCombatantComponent>& WeakAttacker : Attackers)
+	for (const TWeakObjectPtr<UARPGCombatantComponent>& WeakAttacker : CoordinatedAttackers)
 	{
 		if (UARPGCombatantComponent* Attacker = WeakAttacker.Get())
 		{
 			SortedAttackers.Add(Attacker);
-			Attacker->SetAttackPermission(false);
 		}
 	}
 
-	SortedAttackers.Sort([](const UARPGCombatantComponent& A, const UARPGCombatantComponent& B)
+	const FVector TargetLocation = TargetActor->GetActorLocation();
+
+	SortedAttackers.Sort([TargetLocation](const UARPGCombatantComponent& A, const UARPGCombatantComponent& B)
 	{
 		if (A.GetEngagementPriority() != B.GetEngagementPriority())
 		{
 			return A.GetEngagementPriority() > B.GetEngagementPriority();
 		}
 
-		return FVector::DistSquared2D(A.GetCombatantActor()->GetActorLocation(), A.GetCurrentTarget()->GetCombatantActor()->GetActorLocation())
-			< FVector::DistSquared2D(B.GetCombatantActor()->GetActorLocation(), B.GetCurrentTarget()->GetCombatantActor()->GetActorLocation());
+		const float DistanceA = FVector::DistSquared2D(A.GetCombatantActor()->GetActorLocation(), TargetLocation);
+		const float DistanceB = FVector::DistSquared2D(B.GetCombatantActor()->GetActorLocation(), TargetLocation);
+
+		return DistanceA < DistanceB;
 	});
 
-	TSet<int32> OccupiedCandidates;
+	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment> PendingAssignments;
 
-	BuildEngagementAssignments(SortedAttackers, OccupiedCandidates);
-	BuildPressureAssignments(SortedAttackers, OccupiedCandidates);
-	UpdateAttackPermissions(SortedAttackers);
+	if (!Candidates.IsEmpty())
+	{
+		BuildEngagementAssignments(SortedAttackers, PendingAssignments);
+		BuildPressureAssignments(SortedAttackers, PendingAssignments);
+	}
 
+	CommitAssignments(PendingAssignments);
+
+	LastGoalUpdateOrigin = TargetLocation;
 	bAssignmentsDirty = false;
 }
 
-void UARPGCombatCoordinationComponent::BuildEngagementAssignments(TArray<UARPGCombatantComponent*>& SortedAttackers, TSet<int32>& OccupiedCandidates)
+void UARPGCombatCoordinationComponent::BuildEngagementAssignments(const TArray<UARPGCombatantComponent*>& SortedAttackers,
+	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const
 {
 	for (UARPGCombatantComponent* Attacker : SortedAttackers)
 	{
-		const int32 CandidateIndex = FindBestEngagementCandidate(Attacker, OccupiedCandidates);
+		const int32 CandidateIndex = FindBestEngagementCandidate(Attacker, PendingAssignments);
 
 		if (CandidateIndex == INDEX_NONE)
 		{
 			continue;
 		}
 
-		OccupiedCandidates.Add(CandidateIndex);
-		Attacker->SetCoordination(EARPGEngagementState::Engaged, Candidates[CandidateIndex].Location);
+		FARPGCombatAssignment Assignment;
+		Assignment.State = EARPGEngagementState::Engaged;
+		Assignment.CandidateIndex = CandidateIndex;
+
+		PendingAssignments.Add(Attacker, Assignment);
 	}
 }
 
-void UARPGCombatCoordinationComponent::BuildPressureAssignments(const TArray<UARPGCombatantComponent*>& AttackersToAssign, const TSet<int32>& OccupiedCandidates)
+void UARPGCombatCoordinationComponent::BuildPressureAssignments(const TArray<UARPGCombatantComponent*>& SortedAttackers,
+	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const
 {
-	TSet<int32> PressureCandidates = OccupiedCandidates;
-
-	for (UARPGCombatantComponent* Attacker : AttackersToAssign)
+	for (UARPGCombatantComponent* Attacker : SortedAttackers)
 	{
-		if (Attacker->GetEngagementState() == EARPGEngagementState::Engaged)
+		if (PendingAssignments.Contains(Attacker))
 		{
 			continue;
 		}
 
-		const int32 CandidateIndex = FindBestPressureCandidate(Attacker, PressureCandidates);
+		const int32 CandidateIndex = FindBestPressureCandidate(Attacker, PendingAssignments);
 
 		if (CandidateIndex == INDEX_NONE)
 		{
-			Attacker->SetCoordination(EARPGEngagementState::Pressure, TargetActor->GetActorLocation());
 			continue;
 		}
 
-		PressureCandidates.Add(CandidateIndex);
-		Attacker->SetCoordination(EARPGEngagementState::Pressure, Candidates[CandidateIndex].Location);
+		FARPGCombatAssignment Assignment;
+		Assignment.State = EARPGEngagementState::Pressure;
+		Assignment.CandidateIndex = CandidateIndex;
+
+		PendingAssignments.Add(Attacker, Assignment);
 	}
 }
 
-bool UARPGCombatCoordinationComponent::CanOccupyCandidate(const UARPGCombatantComponent* Attacker, const int32 CandidateIndex) const
+void UARPGCombatCoordinationComponent::CommitAssignments(
+	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments)
+{
+	for (const TWeakObjectPtr<UARPGCombatantComponent>& WeakAttacker : CoordinatedAttackers)
+	{
+		UARPGCombatantComponent* Attacker = WeakAttacker.Get();
+
+		if (!IsValid(Attacker))
+		{
+			continue;
+		}
+
+		const FARPGCombatAssignment* Assignment = PendingAssignments.Find(WeakAttacker);
+
+		if (!Assignment || !Candidates.IsValidIndex(Assignment->CandidateIndex))
+		{
+			Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
+			continue;
+		}
+
+		Attacker->SetCoordination(Assignment->State, GetCandidateWorldLocation(Assignment->CandidateIndex));
+	}
+
+	Assignments = MoveTemp(PendingAssignments);
+}
+
+void UARPGCombatCoordinationComponent::UpdateAssignmentGoals()
+{
+	if (!IsValid(TargetActor) || Assignments.IsEmpty())
+	{
+		return;
+	}
+
+	const FVector TargetLocation = TargetActor->GetActorLocation();
+
+	if (FVector::DistSquared2D(TargetLocation, LastGoalUpdateOrigin) < FMath::Square(AssignmentGoalUpdateDistance))
+	{
+		return;
+	}
+
+	for (const TPair<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& Pair : Assignments)
+	{
+		UARPGCombatantComponent* Attacker = Pair.Key.Get();
+
+		if (!IsValid(Attacker) || !Candidates.IsValidIndex(Pair.Value.CandidateIndex))
+		{
+			continue;
+		}
+
+		Attacker->SetCoordination(Pair.Value.State, GetCandidateWorldLocation(Pair.Value.CandidateIndex));
+	}
+
+	LastGoalUpdateOrigin = TargetLocation;
+}
+
+int32 UARPGCombatCoordinationComponent::FindBestEngagementCandidate(const UARPGCombatantComponent* Attacker,
+	const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const
+{
+	if (!IsValid(Attacker) || !IsValid(Attacker->GetCombatantActor()) || !IsValid(TargetActor))
+	{
+		return INDEX_NONE;
+	}
+
+	const FVector AttackerLocation = Attacker->GetCombatantActor()->GetActorLocation();
+	const FVector TargetLocation = TargetActor->GetActorLocation();
+
+	int32 BestIndex = INDEX_NONE;
+	float BestDistanceSquared = FLT_MAX;
+
+	for (int32 Index = 0; Index < Candidates.Num(); ++Index)
+	{
+		const FVector CandidateLocation = GetCandidateWorldLocation(Index);
+
+		if (FVector::DistSquared2D(TargetLocation, CandidateLocation) > FMath::Square(Attacker->GetMaxEngagementDistance()))
+		{
+			continue;
+		}
+
+		if (!CanOccupyCandidate(Attacker, Index, PendingAssignments))
+		{
+			continue;
+		}
+
+		const float DistanceSquared = FVector::DistSquared2D(AttackerLocation, CandidateLocation);
+
+		if (DistanceSquared >= BestDistanceSquared)
+		{
+			continue;
+		}
+
+		BestDistanceSquared = DistanceSquared;
+		BestIndex = Index;
+	}
+
+	return BestIndex;
+}
+
+int32 UARPGCombatCoordinationComponent::FindBestPressureCandidate(const UARPGCombatantComponent* Attacker,
+	const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const
+{
+	if (!IsValid(Attacker) || !IsValid(Attacker->GetCombatantActor()) || !IsValid(TargetActor))
+	{
+		return INDEX_NONE;
+	}
+
+	const FVector AttackerLocation = Attacker->GetCombatantActor()->GetActorLocation();
+	const FVector TargetLocation = TargetActor->GetActorLocation();
+
+	int32 BestIndex = INDEX_NONE;
+	float BestDistanceSquared = FLT_MAX;
+
+	for (int32 Index = 0; Index < Candidates.Num(); ++Index)
+	{
+		const FVector CandidateLocation = GetCandidateWorldLocation(Index);
+
+		if (FVector::DistSquared2D(TargetLocation, CandidateLocation) < FMath::Square(PressureMinDistance))
+		{
+			continue;
+		}
+
+		if (!CanOccupyCandidate(Attacker, Index, PendingAssignments))
+		{
+			continue;
+		}
+
+		const float DistanceSquared = FVector::DistSquared2D(AttackerLocation, CandidateLocation);
+
+		if (DistanceSquared >= BestDistanceSquared)
+		{
+			continue;
+		}
+
+		BestDistanceSquared = DistanceSquared;
+		BestIndex = Index;
+	}
+
+	return BestIndex;
+}
+
+bool UARPGCombatCoordinationComponent::CanOccupyCandidate(const UARPGCombatantComponent* Attacker, const int32 CandidateIndex,
+	const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const
 {
 	if (!IsValid(Attacker) || !Candidates.IsValidIndex(CandidateIndex))
 	{
 		return false;
 	}
 
-	const float RequiredRadius = Attacker->GetOccupancyRadius() + AssignmentSeparation;
+	const FVector CandidateLocation = GetCandidateWorldLocation(CandidateIndex);
 
-	for (const TWeakObjectPtr<UARPGCombatantComponent>& WeakOther : Attackers)
+	for (const TPair<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& Pair : PendingAssignments)
 	{
-		const UARPGCombatantComponent* Other = WeakOther.Get();
+		const UARPGCombatantComponent* Other = Pair.Key.Get();
 
-		if (!Other || Other == Attacker || Other->GetEngagementState() != EARPGEngagementState::Engaged)
+		if (!IsValid(Other) || !Candidates.IsValidIndex(Pair.Value.CandidateIndex))
 		{
 			continue;
 		}
 
-		const float RequiredSeparation = RequiredRadius + Other->GetOccupancyRadius();
+		const float RequiredSeparation = Attacker->GetOccupancyRadius() + Other->GetOccupancyRadius() + AssignmentSeparation;
+		const FVector OtherLocation = GetCandidateWorldLocation(Pair.Value.CandidateIndex);
 
-		if (FVector::DistSquared2D(Candidates[CandidateIndex].Location, Other->GetEngagementLocation()) < FMath::Square(RequiredSeparation))
+		if (FVector::DistSquared2D(CandidateLocation, OtherLocation) < FMath::Square(RequiredSeparation))
 		{
 			return false;
 		}
@@ -296,111 +503,15 @@ bool UARPGCombatCoordinationComponent::CanOccupyCandidate(const UARPGCombatantCo
 	return true;
 }
 
-void UARPGCombatCoordinationComponent::UpdateAttackPermissions(const TArray<UARPGCombatantComponent*>& AttackersToUpdate)
+FVector UARPGCombatCoordinationComponent::GetCandidateWorldLocation(const int32 CandidateIndex) const
 {
-	TArray<UARPGCombatantComponent*> EngagedAttackers;
-
-	for (UARPGCombatantComponent* Attacker : AttackersToUpdate)
+	if (!Candidates.IsValidIndex(CandidateIndex) || !IsValid(TargetActor))
 	{
-		Attacker->SetAttackPermission(false);
-
-		if (Attacker->GetEngagementState() == EARPGEngagementState::Engaged)
-		{
-			EngagedAttackers.Add(Attacker);
-		}
+		return FVector::ZeroVector;
 	}
 
-	if (EngagedAttackers.IsEmpty())
-	{
-		AttackSelectionOffset = 0;
-		return;
-	}
+	FVector TargetDelta = TargetActor->GetActorLocation() - FieldOrigin;
+	TargetDelta.Z = 0.0f;
 
-	AttackSelectionOffset %= EngagedAttackers.Num();
-
-	const int32 AttackCount = FMath::Min(MaxConcurrentAttackers, EngagedAttackers.Num());
-
-	for (int32 Index = 0; Index < AttackCount; ++Index)
-	{
-		const int32 AttackerIndex = (AttackSelectionOffset + Index) % EngagedAttackers.Num();
-		EngagedAttackers[AttackerIndex]->SetAttackPermission(true);
-	}
-
-	AttackSelectionOffset = (AttackSelectionOffset + AttackCount) % EngagedAttackers.Num();
-}
-
-int32 UARPGCombatCoordinationComponent::FindBestEngagementCandidate(const UARPGCombatantComponent* Attacker, const TSet<int32>& OccupiedCandidates) const
-{
-	if (!IsValid(Attacker) || !Attacker->GetCombatantActor() || !IsValid(TargetActor))
-	{
-		return INDEX_NONE;
-	}
-
-	const FVector AttackerLocation = Attacker->GetCombatantActor()->GetActorLocation();
-
-	int32 BestIndex = INDEX_NONE;
-	float BestValue = -FLT_MAX;
-
-	for (int32 Index = 0; Index < Candidates.Num(); ++Index)
-	{
-		if (OccupiedCandidates.Contains(Index) || !CanOccupyCandidate(Attacker, Index))
-		{
-			continue;
-		}
-
-		const float TargetDistance = FVector::Dist2D(TargetActor->GetActorLocation(), Candidates[Index].Location);
-
-		if (TargetDistance > Attacker->GetMaxEngagementDistance())
-		{
-			continue;
-		}
-
-		const float TravelDistance = FVector::Dist2D(AttackerLocation, Candidates[Index].Location);
-		const float Value = Candidates[Index].Score * 1000.0f - TravelDistance;
-
-		if (Value > BestValue)
-		{
-			BestValue = Value;
-			BestIndex = Index;
-		}
-	}
-
-	return BestIndex;
-}
-
-int32 UARPGCombatCoordinationComponent::FindBestPressureCandidate(const UARPGCombatantComponent* Attacker, const TSet<int32>& OccupiedCandidates) const
-{
-	if (!IsValid(Attacker) || !Attacker->GetCombatantActor() || !TargetActor)
-	{
-		return INDEX_NONE;
-	}
-
-	const FVector AttackerLocation = Attacker->GetCombatantActor()->GetActorLocation();
-
-	int32 BestIndex = INDEX_NONE;
-	float BestValue = -FLT_MAX;
-
-	for (int32 Index = 0; Index < Candidates.Num(); ++Index)
-	{
-		if (OccupiedCandidates.Contains(Index))
-		{
-			continue;
-		}
-
-		if (FVector::DistSquared2D(TargetActor->GetActorLocation(), Candidates[Index].Location) < FMath::Square(PressureMinDistance))
-		{
-			continue;
-		}
-
-		const float TravelDistance = FVector::Dist2D(AttackerLocation, Candidates[Index].Location);
-		const float Value = Candidates[Index].Score * 500.0f - TravelDistance;
-
-		if (Value > BestValue)
-		{
-			BestValue = Value;
-			BestIndex = Index;
-		}
-	}
-
-	return BestIndex;
+	return Candidates[CandidateIndex].Location + TargetDelta;
 }

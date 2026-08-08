@@ -4,5 +4,7 @@
 
 namespace ARPGGameplayTags
 {
-	UE_DEFINE_GAMEPLAY_TAG(StateTreeEvent_CombatContextChanged, "StateTreeEvent.Combat.ContextChanged");
+	UE_DEFINE_GAMEPLAY_TAG(StateTreeEvent_CombatTargetChanged, "StateTreeEvent.Combat.TargetChanged");
+	UE_DEFINE_GAMEPLAY_TAG(StateTreeEvent_CombatRoleChanged, "StateTreeEvent.Combat.RoleChanged");
+	UE_DEFINE_GAMEPLAY_TAG(StateTreeEvent_CombatGoalChanged, "StateTreeEvent.Combat.GoalChanged");
 }

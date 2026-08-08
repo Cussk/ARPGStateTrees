@@ -13,7 +13,7 @@ DECLARE_MULTICAST_DELEGATE(FARPGCoordinationChanged);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FARPGCombatantTargetChanged, UARPGCombatantComponent*, UARPGCombatantComponent*);
 
 /**
- * Provides shared combat identity and targeting state for players, enemies, and allied combatants.
+ * Provides shared combat identity, targeting, and coordination state for combatants.
  */
 UCLASS(ClassGroup = "ARPG", meta = (BlueprintSpawnableComponent))
 class ARPGSTATETREES_API UARPGCombatantComponent : public UActorComponent
@@ -29,17 +29,14 @@ public:
 	void SetTeam(EARPGCombatTeam NewTeam);
 	void SetTargetable(bool bNewTargetable);
 	void SetCurrentTarget(UARPGCombatantComponent* NewTarget);
+	void SetCoordination(EARPGEngagementState NewState, const FVector& NewLocation);
 
 	EARPGCombatTeam GetTeam() const;
 	bool IsTargetable() const;
 	bool IsHostileTo(const UARPGCombatantComponent* Other) const;
-	
-	void SetCoordination(EARPGEngagementState NewState, const FVector& NewLocation);
-	void SetAttackPermission(bool bNewAttackPermission);
 
 	EARPGEngagementState GetEngagementState() const;
 	const FVector& GetEngagementLocation() const;
-	bool HasAttackPermission() const;
 
 	float GetOccupancyRadius() const;
 	float GetMaxEngagementDistance() const;
@@ -47,7 +44,7 @@ public:
 
 	AActor* GetCombatantActor() const;
 	UARPGCombatantComponent* GetCurrentTarget() const;
-	
+
 	FARPGCombatantTargetChanged OnTargetChanged;
 	FARPGCoordinationChanged OnCoordinationChanged;
 
@@ -58,11 +55,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
 	bool bTargetable = true;
 
-	UPROPERTY(Transient)
-	TObjectPtr<AActor> CombatantActor;
-
-	TWeakObjectPtr<UARPGCombatantComponent> CurrentTarget;
-	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Engagement")
 	float OccupancyRadius = 45.0f;
 
@@ -73,11 +65,13 @@ protected:
 	int32 EngagementPriority = 0;
 
 	UPROPERTY(Transient)
+	TObjectPtr<AActor> CombatantActor;
+
+	UPROPERTY(Transient)
 	EARPGEngagementState EngagementState = EARPGEngagementState::None;
 
 	UPROPERTY(Transient)
 	FVector EngagementLocation = FVector::ZeroVector;
 
-	UPROPERTY(Transient)
-	bool bAttackPermission = false;
+	TWeakObjectPtr<UARPGCombatantComponent> CurrentTarget;
 };

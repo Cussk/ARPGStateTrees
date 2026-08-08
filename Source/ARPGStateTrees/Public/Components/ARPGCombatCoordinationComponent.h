@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "EnvironmentQuery/EnvQueryTypes.h"
+#include "Types/ARPGCombatTypes.h"
 #include "ARPGCombatCoordinationComponent.generated.h"
 
 class UARPGCombatantComponent;
@@ -16,9 +17,20 @@ struct FARPGCoordinationCandidate
 	GENERATED_BODY()
 
 	FVector Location = FVector::ZeroVector;
-	float Score = 0.0f;
 };
 
+USTRUCT()
+struct FARPGCombatAssignment
+{
+	GENERATED_BODY()
+
+	EARPGEngagementState State = EARPGEngagementState::None;
+	int32 CandidateIndex = INDEX_NONE;
+};
+
+/**
+ * Coordinates local combat positioning around this component's owning combatant.
+ */
 UCLASS(ClassGroup = "ARPG", meta = (BlueprintSpawnableComponent))
 class ARPGSTATETREES_API UARPGCombatCoordinationComponent : public UActorComponent
 {
@@ -38,27 +50,46 @@ protected:
 	void StopCoordination();
 	void UpdateCoordination();
 
+	bool UpdateCoordinatedAttackers();
+
 	void RequestFieldRefresh();
 	void OnFieldQueryFinished(TSharedPtr<FEnvQueryResult> Result);
 
 	void RebuildAssignments();
-	void BuildEngagementAssignments(TArray<UARPGCombatantComponent*>& SortedAttackers, TSet<int32>& OccupiedCandidates);
-	void BuildPressureAssignments(const TArray<UARPGCombatantComponent*>& Attackers, const TSet<int32>& OccupiedCandidates);
-	void UpdateAttackPermissions(const TArray<UARPGCombatantComponent*>& Attackers);
+	void BuildEngagementAssignments(const TArray<UARPGCombatantComponent*>& SortedAttackers,
+		TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const;
+	void BuildPressureAssignments(const TArray<UARPGCombatantComponent*>& SortedAttackers,
+		TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const;
+	void CommitAssignments(TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments);
+	void UpdateAssignmentGoals();
 
-	int32 FindBestEngagementCandidate(const UARPGCombatantComponent* Attacker, const TSet<int32>& OccupiedCandidates) const;
-	int32 FindBestPressureCandidate(const UARPGCombatantComponent* Attacker, const TSet<int32>& OccupiedCandidates) const;
+	int32 FindBestEngagementCandidate(const UARPGCombatantComponent* Attacker,
+		const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const;
+	int32 FindBestPressureCandidate(const UARPGCombatantComponent* Attacker,
+		const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const;
 
-	bool CanOccupyCandidate(const UARPGCombatantComponent* Attacker, int32 CandidateIndex) const;
+	bool CanOccupyCandidate(const UARPGCombatantComponent* Attacker, int32 CandidateIndex,
+		const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const;
+
+	FVector GetCandidateWorldLocation(int32 CandidateIndex) const;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|EQS")
 	TObjectPtr<UEnvQuery> EngagementQuery;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination", meta = (ClampMin = "0.05"))
-	float CoordinationInterval = 0.25f;
+	float CoordinationInterval = 0.10f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination")
-	float FieldRefreshDistance = 100.0f;
+	float CoordinationActivationRadius = 700.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination")
+	float CoordinationDeactivationRadius = 850.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination")
+	float AssignmentGoalUpdateDistance = 40.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination")
+	float FieldRefreshDistance = 200.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination")
 	float PressureMinDistance = 275.0f;
@@ -66,20 +97,22 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination")
 	float AssignmentSeparation = 10.0f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination")
-	int32 MaxConcurrentAttackers = 3;
-
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> TargetActor;
 
 	TSet<TWeakObjectPtr<UARPGCombatantComponent>> Attackers;
-	TArray<FARPGCoordinationCandidate> Candidates;
+	TSet<TWeakObjectPtr<UARPGCombatantComponent>> CoordinatedAttackers;
 
-	FVector LastQueryOrigin = FVector::ZeroVector;
+	TArray<FARPGCoordinationCandidate> Candidates;
+	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment> Assignments;
+
+	FVector FieldOrigin = FVector::ZeroVector;
+	FVector PendingQueryOrigin = FVector::ZeroVector;
+	FVector LastGoalUpdateOrigin = FVector::ZeroVector;
 
 	FTimerHandle CoordinationTimer;
+
 	int32 ActiveQueryId = INDEX_NONE;
-	int32 AttackSelectionOffset = 0;
 
 	bool bFieldInitialized = false;
 	bool bAssignmentsDirty = false;

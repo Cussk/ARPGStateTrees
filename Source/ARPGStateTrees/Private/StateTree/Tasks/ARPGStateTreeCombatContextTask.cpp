@@ -57,7 +57,7 @@ EStateTreeRunStatus FARPGStateTreeCombatContextTask::EnterState(FStateTreeExecut
 			}
 
 			UpdateTarget(*Data);
-			WeakContext.SendEvent(ARPGGameplayTags::StateTreeEvent_CombatContextChanged, FConstStructView(), FName(TEXT("CombatContext")));
+			WeakContext.SendEvent(ARPGGameplayTags::StateTreeEvent_CombatTargetChanged, FConstStructView(), FName(TEXT("CombatTarget")));
 		});
 
 	InstanceData.CoordinationChangedHandle = InstanceData.CombatantComponent->OnCoordinationChanged.AddLambda(
@@ -70,8 +70,21 @@ EStateTreeRunStatus FARPGStateTreeCombatContextTask::EnterState(FStateTreeExecut
 				return;
 			}
 
+			const EARPGEngagementState PreviousState = Data->EngagementState;
+			const FVector PreviousLocation = Data->EngagementLocation;
+
 			UpdateCoordination(*Data);
-			WeakContext.SendEvent(ARPGGameplayTags::StateTreeEvent_CombatContextChanged, FConstStructView(), FName(TEXT("CombatContext")));
+
+			if (PreviousState != Data->EngagementState)
+			{
+				WeakContext.SendEvent(ARPGGameplayTags::StateTreeEvent_CombatRoleChanged, FConstStructView(), FName(TEXT("CombatRole")));
+				return;
+			}
+
+			if (!PreviousLocation.Equals(Data->EngagementLocation, 1.0f))
+			{
+				WeakContext.SendEvent(ARPGGameplayTags::StateTreeEvent_CombatGoalChanged, FConstStructView(), FName(TEXT("CombatGoal")));
+			}
 		});
 
 	return EStateTreeRunStatus::Running;
@@ -101,7 +114,7 @@ void FARPGStateTreeCombatContextTask::UpdateTarget(FInstanceDataType& InstanceDa
 	}
 
 	const UARPGCombatantComponent* TargetCombatant = InstanceData.CombatantComponent->GetCurrentTarget();
-	InstanceData.TargetActor = TargetCombatant ? TargetCombatant->GetCombatantActor() : nullptr;
+	InstanceData.TargetActor = IsValid(TargetCombatant) ? TargetCombatant->GetCombatantActor() : nullptr;
 }
 
 void FARPGStateTreeCombatContextTask::UpdateCoordination(FInstanceDataType& InstanceData)
@@ -110,11 +123,9 @@ void FARPGStateTreeCombatContextTask::UpdateCoordination(FInstanceDataType& Inst
 	{
 		InstanceData.EngagementState = EARPGEngagementState::None;
 		InstanceData.EngagementLocation = FVector::ZeroVector;
-		InstanceData.bAttackPermission = false;
 		return;
 	}
 
 	InstanceData.EngagementState = InstanceData.CombatantComponent->GetEngagementState();
 	InstanceData.EngagementLocation = InstanceData.CombatantComponent->GetEngagementLocation();
-	InstanceData.bAttackPermission = InstanceData.CombatantComponent->HasAttackPermission();
 }

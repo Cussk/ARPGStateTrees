@@ -44,7 +44,7 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UARPGCombatantRegistrySubsystem> CombatantRegistrySubsystem;
-	
+
 	UPROPERTY(Transient)
 	TObjectPtr<UARPGCombatCoordinationComponent> TargetCoordinationComponent;
 

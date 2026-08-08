@@ -58,7 +58,8 @@ void AARPGEnemyAIController::OnPossess(APawn* InPawn)
 	UpdateTarget();
 
 	const float InitialDelay = TargetRefreshInterval + FMath::FRandRange(0.0f, TargetRefreshInterval);
-	GetWorldTimerManager().SetTimer(TargetRefreshTimerHandle, this, &AARPGEnemyAIController::UpdateTarget, TargetRefreshInterval, true, InitialDelay);
+	GetWorldTimerManager().SetTimer(TargetRefreshTimerHandle, this, &AARPGEnemyAIController::UpdateTarget,
+		TargetRefreshInterval, true, InitialDelay);
 }
 
 void AARPGEnemyAIController::OnUnPossess()
@@ -94,30 +95,32 @@ void AARPGEnemyAIController::SetCurrentTarget(UARPGCombatantComponent* NewTarget
 	{
 		return;
 	}
-	
+
 	if (IsValid(TargetCoordinationComponent) && IsValid(ControlledCombatantComponent))
 	{
 		TargetCoordinationComponent->UnregisterAttacker(ControlledCombatantComponent);
 	}
 
 	TargetCoordinationComponent = nullptr;
-
 	CurrentTargetCombatant = NewTarget;
-	const AActor* CurrentTargetActor = NewTarget ? NewTarget->GetCombatantActor() : nullptr;
 
 	if (IsValid(ControlledCombatantComponent))
 	{
 		ControlledCombatantComponent->SetCurrentTarget(NewTarget);
 	}
-	
-	if (CurrentTargetActor && IsValid(ControlledCombatantComponent))
-	{
-		TargetCoordinationComponent = CurrentTargetActor->FindComponentByClass<UARPGCombatCoordinationComponent>();
 
-		if (IsValid(TargetCoordinationComponent))
-		{
-			TargetCoordinationComponent->RegisterAttacker(ControlledCombatantComponent);
-		}
+	AActor* TargetActor = IsValid(NewTarget) ? NewTarget->GetCombatantActor() : nullptr;
+
+	if (!IsValid(TargetActor) || !IsValid(ControlledCombatantComponent))
+	{
+		return;
+	}
+
+	TargetCoordinationComponent = TargetActor->FindComponentByClass<UARPGCombatCoordinationComponent>();
+
+	if (IsValid(TargetCoordinationComponent))
+	{
+		TargetCoordinationComponent->RegisterAttacker(ControlledCombatantComponent);
 	}
 }
 
@@ -125,7 +128,8 @@ bool AARPGEnemyAIController::IsCurrentTargetValid() const
 {
 	const UARPGCombatantComponent* TargetCombatant = CurrentTargetCombatant.Get();
 
-	if (!ControlledCombatantComponent || !IsValid(TargetCombatant) || !TargetCombatant->IsTargetable() || !ControlledCombatantComponent->IsHostileTo(TargetCombatant))
+	if (!IsValid(ControlledCombatantComponent) || !IsValid(TargetCombatant) || !TargetCombatant->IsTargetable()
+		|| !ControlledCombatantComponent->IsHostileTo(TargetCombatant))
 	{
 		return false;
 	}
@@ -138,5 +142,6 @@ bool AARPGEnemyAIController::IsCurrentTargetValid() const
 		return false;
 	}
 
-	return FVector::DistSquared2D(ControlledActor->GetActorLocation(), TargetActor->GetActorLocation()) <= FMath::Square(TargetDropRadius);
+	return FVector::DistSquared2D(ControlledActor->GetActorLocation(), TargetActor->GetActorLocation())
+		<= FMath::Square(TargetDropRadius);
 }
