@@ -9,6 +9,7 @@
 
 class UARPGCombatantComponent;
 
+DECLARE_MULTICAST_DELEGATE(FARPGCoordinationChanged);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FARPGCombatantTargetChanged, UARPGCombatantComponent*, UARPGCombatantComponent*);
 
 /**
@@ -32,11 +33,23 @@ public:
 	EARPGCombatTeam GetTeam() const;
 	bool IsTargetable() const;
 	bool IsHostileTo(const UARPGCombatantComponent* Other) const;
+	
+	void SetCoordination(EARPGEngagementState NewState, const FVector& NewLocation);
+	void SetAttackPermission(bool bNewAttackPermission);
+
+	EARPGEngagementState GetEngagementState() const;
+	const FVector& GetEngagementLocation() const;
+	bool HasAttackPermission() const;
+
+	float GetOccupancyRadius() const;
+	float GetMaxEngagementDistance() const;
+	int32 GetEngagementPriority() const;
 
 	AActor* GetCombatantActor() const;
 	UARPGCombatantComponent* GetCurrentTarget() const;
-
+	
 	FARPGCombatantTargetChanged OnTargetChanged;
+	FARPGCoordinationChanged OnCoordinationChanged;
 
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
@@ -49,4 +62,22 @@ protected:
 	TObjectPtr<AActor> CombatantActor;
 
 	TWeakObjectPtr<UARPGCombatantComponent> CurrentTarget;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Engagement")
+	float OccupancyRadius = 45.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Engagement")
+	float MaxEngagementDistance = 180.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Engagement")
+	int32 EngagementPriority = 0;
+
+	UPROPERTY(Transient)
+	EARPGEngagementState EngagementState = EARPGEngagementState::None;
+
+	UPROPERTY(Transient)
+	FVector EngagementLocation = FVector::ZeroVector;
+
+	UPROPERTY(Transient)
+	bool bAttackPermission = false;
 };

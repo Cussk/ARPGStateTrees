@@ -6,6 +6,7 @@
 #include "AIController.h"
 #include "ARPGEnemyAIController.generated.h"
 
+class UARPGCombatCoordinationComponent;
 class UARPGCombatantComponent;
 class UARPGCombatantRegistrySubsystem;
 class UStateTreeAIComponent;
@@ -17,9 +18,6 @@ class ARPGSTATETREES_API AARPGEnemyAIController : public AAIController
 
 public:
 	AARPGEnemyAIController();
-
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AI|Targeting")
-	TObjectPtr<AActor> CurrentTargetActor;
 
 protected:
 	virtual void OnPossess(APawn* InPawn) override;
@@ -46,6 +44,9 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UARPGCombatantRegistrySubsystem> CombatantRegistrySubsystem;
+	
+	UPROPERTY(Transient)
+	TObjectPtr<UARPGCombatCoordinationComponent> TargetCoordinationComponent;
 
 	TWeakObjectPtr<UARPGCombatantComponent> CurrentTargetCombatant;
 	FTimerHandle TargetRefreshTimerHandle;

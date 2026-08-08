@@ -85,6 +85,59 @@ bool UARPGCombatantComponent::IsHostileTo(const UARPGCombatantComponent* Other) 
 	return Team != Other->Team;
 }
 
+void UARPGCombatantComponent::SetCoordination(const EARPGEngagementState NewState, const FVector& NewLocation)
+{
+	if (EngagementState == NewState && EngagementLocation.Equals(NewLocation, 1.0f))
+	{
+		return;
+	}
+
+	EngagementState = NewState;
+	EngagementLocation = NewLocation;
+	OnCoordinationChanged.Broadcast();
+}
+
+void UARPGCombatantComponent::SetAttackPermission(const bool bNewAttackPermission)
+{
+	if (bAttackPermission == bNewAttackPermission)
+	{
+		return;
+	}
+
+	bAttackPermission = bNewAttackPermission;
+	OnCoordinationChanged.Broadcast();
+}
+
+EARPGEngagementState UARPGCombatantComponent::GetEngagementState() const
+{
+	return EngagementState;
+}
+
+const FVector& UARPGCombatantComponent::GetEngagementLocation() const
+{
+	return EngagementLocation;
+}
+
+bool UARPGCombatantComponent::HasAttackPermission() const
+{
+	return bAttackPermission;
+}
+
+float UARPGCombatantComponent::GetOccupancyRadius() const
+{
+	return OccupancyRadius;
+}
+
+float UARPGCombatantComponent::GetMaxEngagementDistance() const
+{
+	return MaxEngagementDistance;
+}
+
+int32 UARPGCombatantComponent::GetEngagementPriority() const
+{
+	return EngagementPriority;
+}
+
 AActor* UARPGCombatantComponent::GetCombatantActor() const
 {
 	return CombatantActor;

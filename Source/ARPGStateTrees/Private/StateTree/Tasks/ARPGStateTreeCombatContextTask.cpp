@@ -1,0 +1,120 @@
+﻿// Copyright Kyle Cuss and Cuss Programming 2026.
+
+#include "StateTree/Tasks/ARPGStateTreeCombatContextTask.h"
+
+#include "AI/ARPGEnemyAIController.h"
+#include "Character/ARPGEnemyCharacter.h"
+#include "Components/ARPGCombatantComponent.h"
+#include "StateTreeAsyncExecutionContext.h"
+#include "StateTreeExecutionContext.h"
+#include "Types/ARPGGameplayTags.h"
+
+FARPGStateTreeCombatContextTask::FARPGStateTreeCombatContextTask()
+{
+	bShouldCallTick = false;
+	bShouldCallTickOnlyOnEvents = false;
+	bShouldCopyBoundPropertiesOnTick = false;
+	bConsideredForCompletion = false;
+}
+
+EStateTreeRunStatus FARPGStateTreeCombatContextTask::EnterState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const
+{
+	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+
+	if (!IsValid(InstanceData.AIController))
+	{
+		return EStateTreeRunStatus::Failed;
+	}
+
+	const AARPGEnemyCharacter* EnemyCharacter = Cast<AARPGEnemyCharacter>(InstanceData.AIController->GetPawn());
+
+	if (!IsValid(EnemyCharacter))
+	{
+		return EStateTreeRunStatus::Failed;
+	}
+
+	InstanceData.CombatantComponent = EnemyCharacter->GetCombatantComponent();
+
+	if (!IsValid(InstanceData.CombatantComponent))
+	{
+		return EStateTreeRunStatus::Failed;
+	}
+
+	UpdateTarget(InstanceData);
+	UpdateCoordination(InstanceData);
+
+	TStateTreeInstanceDataStructRef<FInstanceDataType> InstanceDataRef = Context.GetInstanceDataStructRef(*this);
+	const FStateTreeWeakExecutionContext WeakContext = Context.MakeWeakExecutionContext();
+
+	InstanceData.TargetChangedHandle = InstanceData.CombatantComponent->OnTargetChanged.AddLambda(
+		[InstanceDataRef, WeakContext](UARPGCombatantComponent*, UARPGCombatantComponent*) mutable
+		{
+			FInstanceDataType* Data = InstanceDataRef.GetPtr();
+
+			if (!Data)
+			{
+				return;
+			}
+
+			UpdateTarget(*Data);
+			WeakContext.SendEvent(ARPGGameplayTags::StateTreeEvent_CombatContextChanged, FConstStructView(), FName(TEXT("CombatContext")));
+		});
+
+	InstanceData.CoordinationChangedHandle = InstanceData.CombatantComponent->OnCoordinationChanged.AddLambda(
+		[InstanceDataRef, WeakContext]() mutable
+		{
+			FInstanceDataType* Data = InstanceDataRef.GetPtr();
+
+			if (!Data)
+			{
+				return;
+			}
+
+			UpdateCoordination(*Data);
+			WeakContext.SendEvent(ARPGGameplayTags::StateTreeEvent_CombatContextChanged, FConstStructView(), FName(TEXT("CombatContext")));
+		});
+
+	return EStateTreeRunStatus::Running;
+}
+
+void FARPGStateTreeCombatContextTask::ExitState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const
+{
+	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+
+	if (IsValid(InstanceData.CombatantComponent))
+	{
+		InstanceData.CombatantComponent->OnTargetChanged.Remove(InstanceData.TargetChangedHandle);
+		InstanceData.CombatantComponent->OnCoordinationChanged.Remove(InstanceData.CoordinationChangedHandle);
+	}
+
+	InstanceData.TargetChangedHandle.Reset();
+	InstanceData.CoordinationChangedHandle.Reset();
+	InstanceData.CombatantComponent = nullptr;
+}
+
+void FARPGStateTreeCombatContextTask::UpdateTarget(FInstanceDataType& InstanceData)
+{
+	if (!IsValid(InstanceData.CombatantComponent))
+	{
+		InstanceData.TargetActor = nullptr;
+		return;
+	}
+
+	const UARPGCombatantComponent* TargetCombatant = InstanceData.CombatantComponent->GetCurrentTarget();
+	InstanceData.TargetActor = TargetCombatant ? TargetCombatant->GetCombatantActor() : nullptr;
+}
+
+void FARPGStateTreeCombatContextTask::UpdateCoordination(FInstanceDataType& InstanceData)
+{
+	if (!IsValid(InstanceData.CombatantComponent))
+	{
+		InstanceData.EngagementState = EARPGEngagementState::None;
+		InstanceData.EngagementLocation = FVector::ZeroVector;
+		InstanceData.bAttackPermission = false;
+		return;
+	}
+
+	InstanceData.EngagementState = InstanceData.CombatantComponent->GetEngagementState();
+	InstanceData.EngagementLocation = InstanceData.CombatantComponent->GetEngagementLocation();
+	InstanceData.bAttackPermission = InstanceData.CombatantComponent->HasAttackPermission();
+}

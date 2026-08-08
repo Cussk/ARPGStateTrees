@@ -18,7 +18,8 @@ public class ARPGStateTrees : ModuleRules
 			"AIModule",
 			"GameplayTasks",
 			"StateTreeModule",
-			"GameplayStateTreeModule"
+			"GameplayStateTreeModule",
+			"GameplayTags"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]

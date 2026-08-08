@@ -6,6 +6,7 @@
 #include "GameFramework/Character.h"
 #include "ARPGCharacter.generated.h"
 
+class UARPGCombatCoordinationComponent;
 class UARPGCombatantComponent;
 class UARPGNavigationComponent;
 class UCameraComponent;
@@ -25,6 +26,9 @@ public:
 	
 	UFUNCTION(BlueprintPure)
 	UARPGCombatantComponent* GetCombatantComponent() const;
+	
+	UFUNCTION(BlueprintPure)
+	UARPGCombatCoordinationComponent* GetCombatCoordinationComponent() const;
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
@@ -38,4 +42,7 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	TObjectPtr<UARPGCombatantComponent> CombatantComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	TObjectPtr<UARPGCombatCoordinationComponent> CombatCoordinationComponent;
 };

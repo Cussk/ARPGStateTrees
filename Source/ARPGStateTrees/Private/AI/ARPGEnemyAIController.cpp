@@ -4,6 +4,7 @@
 
 #include "Character/ARPGEnemyCharacter.h"
 #include "Components/ARPGCombatantComponent.h"
+#include "Components/ARPGCombatCoordinationComponent.h"
 #include "Components/StateTreeAIComponent.h"
 #include "Subsystems/ARPGCombatantRegistrySubsystem.h"
 
@@ -93,13 +94,30 @@ void AARPGEnemyAIController::SetCurrentTarget(UARPGCombatantComponent* NewTarget
 	{
 		return;
 	}
+	
+	if (IsValid(TargetCoordinationComponent) && IsValid(ControlledCombatantComponent))
+	{
+		TargetCoordinationComponent->UnregisterAttacker(ControlledCombatantComponent);
+	}
+
+	TargetCoordinationComponent = nullptr;
 
 	CurrentTargetCombatant = NewTarget;
-	CurrentTargetActor = NewTarget ? NewTarget->GetCombatantActor() : nullptr;
+	const AActor* CurrentTargetActor = NewTarget ? NewTarget->GetCombatantActor() : nullptr;
 
 	if (IsValid(ControlledCombatantComponent))
 	{
 		ControlledCombatantComponent->SetCurrentTarget(NewTarget);
+	}
+	
+	if (CurrentTargetActor && IsValid(ControlledCombatantComponent))
+	{
+		TargetCoordinationComponent = CurrentTargetActor->FindComponentByClass<UARPGCombatCoordinationComponent>();
+
+		if (IsValid(TargetCoordinationComponent))
+		{
+			TargetCoordinationComponent->RegisterAttacker(ControlledCombatantComponent);
+		}
 	}
 }
 

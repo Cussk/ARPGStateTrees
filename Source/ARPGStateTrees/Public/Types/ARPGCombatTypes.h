@@ -12,3 +12,11 @@ enum class EARPGCombatTeam : uint8
 	Player,
 	Enemy
 };
+
+UENUM(BlueprintType)
+enum class EARPGEngagementState : uint8
+{
+	None,
+	Pressure,
+	Engaged
+};
