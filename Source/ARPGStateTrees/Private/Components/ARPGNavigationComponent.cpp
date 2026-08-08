@@ -20,7 +20,7 @@ void UARPGNavigationComponent::BeginPlay()
 
 	OwnerCharacter = Cast<ACharacter>(GetOwner());
 
-	if (!ensureMsgf(OwnerCharacter,
+	if (!ensureMsgf(IsValid(OwnerCharacter),
 		TEXT("ARPGNavigationComponent must be owned by an ACharacter.")))
 	{
 		return;
@@ -28,7 +28,7 @@ void UARPGNavigationComponent::BeginPlay()
 
 	CharacterMovementComponent = OwnerCharacter->GetCharacterMovement();
 
-	if (!ensureMsgf(CharacterMovementComponent,
+	if (!ensureMsgf(IsValid(CharacterMovementComponent),
 		TEXT("ARPGNavigationComponent requires a CharacterMovementComponent.")))
 	{
 		return;
@@ -42,7 +42,7 @@ void UARPGNavigationComponent::TickComponent(const float DeltaTime, const ELevel
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!OwnerCharacter || !OwnerCharacter->IsLocallyControlled())
+	if (!IsValid(OwnerCharacter) || !OwnerCharacter->IsLocallyControlled())
 	{
 		CompleteNavigation();
 		return;
@@ -61,8 +61,7 @@ void UARPGNavigationComponent::TickComponent(const float DeltaTime, const ELevel
 		return;
 	}
 
-	FVector MoveDirection =
-		PathPoints[CurrentPathPointIndex] - OwnerCharacter->GetActorLocation();
+	FVector MoveDirection = PathPoints[CurrentPathPointIndex] - OwnerCharacter->GetActorLocation();
 
 	MoveDirection.Z = 0.0f;
 
@@ -76,7 +75,7 @@ void UARPGNavigationComponent::TickComponent(const float DeltaTime, const ELevel
 
 bool UARPGNavigationComponent::RequestMoveToLocation(const FVector& WorldDestination)
 {
-	if (!OwnerCharacter || !OwnerCharacter->IsLocallyControlled())
+	if (!IsValid(OwnerCharacter) || !OwnerCharacter->IsLocallyControlled())
 	{
 		return false;
 	}
@@ -93,7 +92,7 @@ bool UARPGNavigationComponent::RequestMoveToLocation(const FVector& WorldDestina
 
 bool UARPGNavigationComponent::UpdateMoveDestination(const FVector& WorldDestination)
 {
-	if (!OwnerCharacter || !OwnerCharacter->IsLocallyControlled() || !ShouldUpdateDestination(WorldDestination))
+	if (!IsValid(OwnerCharacter) || !OwnerCharacter->IsLocallyControlled() || !ShouldUpdateDestination(WorldDestination))
 	{
 		return false;
 	}
@@ -133,21 +132,21 @@ bool UARPGNavigationComponent::IsNavigating() const
 
 bool UARPGNavigationComponent::TryBuildPath(const FVector& WorldDestination)
 {
-	if (!OwnerCharacter || !CharacterMovementComponent)
+	if (!IsValid(OwnerCharacter) || !CharacterMovementComponent)
 	{
 		return false;
 	}
 
 	UWorld* World = GetWorld();
 
-	if (!World)
+	if (!IsValid(World))
 	{
 		return false;
 	}
 
 	UNavigationSystemV1* NavigationSystem = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
 
-	if (!NavigationSystem)
+	if (!IsValid(NavigationSystem))
 	{
 		return false;
 	}
@@ -184,7 +183,7 @@ bool UARPGNavigationComponent::TryBuildPath(const FVector& WorldDestination)
 			ProjectedDestination.Location,
 			OwnerCharacter);
 
-	if (!NavigationPath
+	if (!IsValid(NavigationPath)
 		|| !NavigationPath->IsValid()
 		|| NavigationPath->IsPartial()
 		|| NavigationPath->PathPoints.Num() < 2)
@@ -210,7 +209,7 @@ void UARPGNavigationComponent::RecordDestinationRequest()
 
 void UARPGNavigationComponent::AdvancePathIfNeeded()
 {
-	if (!OwnerCharacter)
+	if (!IsValid(OwnerCharacter))
 	{
 		CompleteNavigation();
 		return;

@@ -4,6 +4,7 @@
 #include "Character/ARPGCharacter.h"
 
 #include "Camera/CameraComponent.h"
+#include "Components/ARPGCombatantComponent.h"
 #include "Components/ARPGNavigationComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -19,6 +20,7 @@ AARPGCharacter::AARPGCharacter()
 	CameraComponent->SetupAttachment(SpringArmComponent);
 	
 	NavigationComponent = CreateDefaultSubobject<UARPGNavigationComponent>(TEXT("NavigationComponent"));
+	CombatantComponent = CreateDefaultSubobject<UARPGCombatantComponent>(TEXT("CombatantComponent"));
 	
 	SpringArmComponent->TargetArmLength = 900.0f;
 	SpringArmComponent->SetUsingAbsoluteRotation(true);
@@ -30,6 +32,7 @@ AARPGCharacter::AARPGCharacter()
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	bUseControllerRotationYaw = false;
 	
+	CombatantComponent->SetTeam(EARPGCombatTeam::Player);
 }
 
 void AARPGCharacter::BeginPlay()
@@ -41,4 +44,9 @@ void AARPGCharacter::BeginPlay()
 UARPGNavigationComponent* AARPGCharacter::GetARPGNavigationComponent() const
 {
 	return NavigationComponent;
+}
+
+UARPGCombatantComponent* AARPGCharacter::GetCombatantComponent() const
+{
+	return CombatantComponent;
 }

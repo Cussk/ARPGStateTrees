@@ -52,7 +52,7 @@ private:
 	void CompleteNavigation();
 
 	UPROPERTY(EditDefaultsOnly, Category = "Navigation|Path Following", meta = (ClampMin = "1.0"))
-	float IntermediatePointAcceptanceRadius = 75.0f;
+	float IntermediatePointAcceptanceRadius = 20.0f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Navigation|Path Following", meta = (ClampMin = "1.0"))
 	float FinalDestinationAcceptanceRadius = 50.0f;

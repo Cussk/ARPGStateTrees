@@ -14,7 +14,11 @@ public class ARPGStateTrees : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"InputCore",
-			"EnhancedInput"
+			"EnhancedInput",
+			"AIModule",
+			"GameplayTasks",
+			"StateTreeModule",
+			"GameplayStateTreeModule"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
