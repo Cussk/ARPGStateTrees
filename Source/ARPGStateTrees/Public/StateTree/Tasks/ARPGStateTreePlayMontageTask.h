@@ -23,6 +23,9 @@ struct FARPGStateTreePlayMontageTaskInstanceData
 
 	UPROPERTY(EditAnywhere, Category = "Input", meta = (ClampMin = "0.01"))
 	float PlayRate = 1.0f;
+	
+	UPROPERTY(EditAnywhere, Category = "Input")
+	TObjectPtr<AActor> FacingTarget;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimInstance> AnimInstance;

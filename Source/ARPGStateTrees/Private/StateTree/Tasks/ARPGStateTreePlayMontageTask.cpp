@@ -41,6 +41,20 @@ EStateTreeRunStatus FARPGStateTreePlayMontageTask::EnterState(FStateTreeExecutio
 		return EStateTreeRunStatus::Failed;
 	}
 
+	if (IsValid(InstanceData.FacingTarget))
+	{
+		FVector FacingDirection = InstanceData.FacingTarget->GetActorLocation() - InstanceData.Character->GetActorLocation();
+		FacingDirection.Z = 0.0f;
+
+		if (FacingDirection.Normalize())
+		{
+			FRotator NewRotation = InstanceData.Character->GetActorRotation();
+			NewRotation.Yaw = FacingDirection.Rotation().Yaw;
+
+			InstanceData.Character->SetActorRotation(NewRotation);
+		}
+	}
+
 	const FStateTreeWeakExecutionContext WeakContext = Context.MakeWeakExecutionContext();
 	TStateTreeInstanceDataStructRef<FInstanceDataType> InstanceDataRef = Context.GetInstanceDataStructRef(*this);
 
