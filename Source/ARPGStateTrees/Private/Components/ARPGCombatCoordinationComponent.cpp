@@ -62,6 +62,7 @@ void UARPGCombatCoordinationComponent::UnregisterAttacker(UARPGCombatantComponen
 
 	CoordinatedAttackers.Remove(Attacker);
 	Assignments.Remove(Attacker);
+	NextPressureRetargetTimes.Remove(Attacker);
 
 	Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
 
@@ -104,6 +105,8 @@ void UARPGCombatCoordinationComponent::StopCoordination()
 	Candidates.Reset();
 	Assignments.Reset();
 	CoordinatedAttackers.Reset();
+	NextPressureRetargetTimes.Reset();
+	LastAssignmentReevaluationTime = 0.0;
 
 	bFieldInitialized = false;
 	bAssignmentsDirty = false;
@@ -112,6 +115,13 @@ void UARPGCombatCoordinationComponent::StopCoordination()
 void UARPGCombatCoordinationComponent::UpdateCoordination()
 {
 	if (!IsValid(TargetActor) || Attackers.IsEmpty())
+	{
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+
+	if (!World)
 	{
 		return;
 	}
@@ -148,7 +158,10 @@ void UARPGCombatCoordinationComponent::UpdateCoordination()
 		RequestFieldRefresh();
 	}
 
-	if (bAssignmentsDirty && !bFieldStale)
+	const double CurrentTime = World->GetTimeSeconds();
+	const bool bReevaluationDue = CurrentTime - LastAssignmentReevaluationTime >= AssignmentReevaluationInterval;
+
+	if ((bAssignmentsDirty || bReevaluationDue) && !bFieldStale)
 	{
 		RebuildAssignments();
 	}
@@ -172,8 +185,9 @@ bool UARPGCombatCoordinationComponent::UpdateCoordinatedAttackers()
 		{
 			CoordinatedAttackers.Remove(*Iterator);
 			Assignments.Remove(*Iterator);
+			NextPressureRetargetTimes.Remove(*Iterator);
 			Iterator.RemoveCurrent();
-			bChanged = true;
+			bChanged = true;			
 			continue;
 		}
 
@@ -186,6 +200,7 @@ bool UARPGCombatCoordinationComponent::UpdateCoordinatedAttackers()
 			{
 				CoordinatedAttackers.Remove(Attacker);
 				Assignments.Remove(Attacker);
+				NextPressureRetargetTimes.Remove(Attacker);
 				Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
 				bChanged = true;
 			}
@@ -268,6 +283,14 @@ void UARPGCombatCoordinationComponent::RebuildAssignments()
 			return A.GetEngagementPriority() > B.GetEngagementPriority();
 		}
 
+		const bool bAEngaged = A.GetEngagementState() == EARPGEngagementState::Engaged;
+		const bool bBEngaged = B.GetEngagementState() == EARPGEngagementState::Engaged;
+
+		if (bAEngaged != bBEngaged)
+		{
+			return bAEngaged;
+		}
+
 		const float DistanceA = FVector::DistSquared2D(A.GetCombatantActor()->GetActorLocation(), TargetLocation);
 		const float DistanceB = FVector::DistSquared2D(B.GetCombatantActor()->GetActorLocation(), TargetLocation);
 
@@ -284,6 +307,11 @@ void UARPGCombatCoordinationComponent::RebuildAssignments()
 
 	CommitAssignments(PendingAssignments);
 
+	if (const UWorld* World = GetWorld())
+	{
+		LastAssignmentReevaluationTime = World->GetTimeSeconds();
+	}
+
 	LastGoalUpdateOrigin = TargetLocation;
 	bAssignmentsDirty = false;
 }
@@ -293,7 +321,27 @@ void UARPGCombatCoordinationComponent::BuildEngagementAssignments(const TArray<U
 {
 	for (UARPGCombatantComponent* Attacker : SortedAttackers)
 	{
-		const int32 CandidateIndex = FindBestEngagementCandidate(Attacker, PendingAssignments);
+		int32 CandidateIndex = INDEX_NONE;
+
+		const FARPGCombatAssignment* ExistingAssignment = Assignments.Find(Attacker);
+
+		if (ExistingAssignment && ExistingAssignment->State == EARPGEngagementState::Engaged
+			&& Candidates.IsValidIndex(ExistingAssignment->CandidateIndex))
+		{
+			const FVector CandidateLocation = GetCandidateWorldLocation(ExistingAssignment->CandidateIndex);
+			const float TargetDistanceSquared = FVector::DistSquared2D(TargetActor->GetActorLocation(), CandidateLocation);
+
+			if (TargetDistanceSquared <= FMath::Square(Attacker->GetMaxEngagementDistance())
+				&& CanOccupyCandidate(Attacker, ExistingAssignment->CandidateIndex, PendingAssignments))
+			{
+				CandidateIndex = ExistingAssignment->CandidateIndex;
+			}
+		}
+
+		if (CandidateIndex == INDEX_NONE)
+		{
+			CandidateIndex = FindBestEngagementCandidate(Attacker, PendingAssignments);
+		}
 
 		if (CandidateIndex == INDEX_NONE)
 		{
@@ -311,6 +359,15 @@ void UARPGCombatCoordinationComponent::BuildEngagementAssignments(const TArray<U
 void UARPGCombatCoordinationComponent::BuildPressureAssignments(const TArray<UARPGCombatantComponent*>& SortedAttackers,
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const
 {
+	const UWorld* World = GetWorld();
+
+	if (!World)
+	{
+		return;
+	}
+
+	const double CurrentTime = World->GetTimeSeconds();
+
 	for (UARPGCombatantComponent* Attacker : SortedAttackers)
 	{
 		if (PendingAssignments.Contains(Attacker))
@@ -318,7 +375,42 @@ void UARPGCombatCoordinationComponent::BuildPressureAssignments(const TArray<UAR
 			continue;
 		}
 
-		const int32 CandidateIndex = FindBestPressureCandidate(Attacker, PendingAssignments);
+		const FARPGCombatAssignment* ExistingAssignment = Assignments.Find(Attacker);
+
+		if (!ExistingAssignment || ExistingAssignment->State != EARPGEngagementState::Pressure
+			|| IsPressureRetargetDue(Attacker, CurrentTime)
+			|| !Candidates.IsValidIndex(ExistingAssignment->CandidateIndex))
+		{
+			continue;
+		}
+
+		const FVector CandidateLocation = GetCandidateWorldLocation(ExistingAssignment->CandidateIndex);
+
+		if (FVector::DistSquared2D(TargetActor->GetActorLocation(), CandidateLocation) < FMath::Square(PressureMinDistance))
+		{
+			continue;
+		}
+
+		if (!CanOccupyCandidate(Attacker, ExistingAssignment->CandidateIndex, PendingAssignments))
+		{
+			continue;
+		}
+
+		PendingAssignments.Add(Attacker, *ExistingAssignment);
+	}
+
+	for (UARPGCombatantComponent* Attacker : SortedAttackers)
+	{
+		if (PendingAssignments.Contains(Attacker))
+		{
+			continue;
+		}
+
+		const FARPGCombatAssignment* ExistingAssignment = Assignments.Find(Attacker);
+		const bool bWasPressure = ExistingAssignment && ExistingAssignment->State == EARPGEngagementState::Pressure;
+		const bool bForceRetarget = bWasPressure && IsPressureRetargetDue(Attacker, CurrentTime);
+
+		const int32 CandidateIndex = FindBestPressureCandidate(Attacker, PendingAssignments, bForceRetarget);
 
 		if (CandidateIndex == INDEX_NONE)
 		{
@@ -336,6 +428,15 @@ void UARPGCombatCoordinationComponent::BuildPressureAssignments(const TArray<UAR
 void UARPGCombatCoordinationComponent::CommitAssignments(
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments)
 {
+	UWorld* World = GetWorld();
+
+	if (!World)
+	{
+		return;
+	}
+
+	const double CurrentTime = World->GetTimeSeconds();
+
 	for (const TWeakObjectPtr<UARPGCombatantComponent>& WeakAttacker : CoordinatedAttackers)
 	{
 		UARPGCombatantComponent* Attacker = WeakAttacker.Get();
@@ -345,15 +446,32 @@ void UARPGCombatCoordinationComponent::CommitAssignments(
 			continue;
 		}
 
-		const FARPGCombatAssignment* Assignment = PendingAssignments.Find(WeakAttacker);
+		const FARPGCombatAssignment* PreviousAssignment = Assignments.Find(WeakAttacker);
+		const FARPGCombatAssignment* NewAssignment = PendingAssignments.Find(WeakAttacker);
 
-		if (!Assignment || !Candidates.IsValidIndex(Assignment->CandidateIndex))
+		if (!NewAssignment || !Candidates.IsValidIndex(NewAssignment->CandidateIndex))
 		{
+			NextPressureRetargetTimes.Remove(Attacker);
 			Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
 			continue;
 		}
 
-		Attacker->SetCoordination(Assignment->State, GetCandidateWorldLocation(Assignment->CandidateIndex));
+		const bool bWasPressure = PreviousAssignment && PreviousAssignment->State == EARPGEngagementState::Pressure;
+		const bool bPressureRetargetWasDue = bWasPressure && IsPressureRetargetDue(Attacker, CurrentTime);
+
+		if (NewAssignment->State == EARPGEngagementState::Pressure)
+		{
+			if (!bWasPressure || bPressureRetargetWasDue)
+			{
+				ScheduleNextPressureRetarget(Attacker, CurrentTime);
+			}
+		}
+		else
+		{
+			NextPressureRetargetTimes.Remove(Attacker);
+		}
+
+		Attacker->SetCoordination(NewAssignment->State, GetCandidateWorldLocation(NewAssignment->CandidateIndex));
 	}
 
 	Assignments = MoveTemp(PendingAssignments);
@@ -431,7 +549,8 @@ int32 UARPGCombatCoordinationComponent::FindBestEngagementCandidate(const UARPGC
 }
 
 int32 UARPGCombatCoordinationComponent::FindBestPressureCandidate(const UARPGCombatantComponent* Attacker,
-	const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const
+	const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments,
+	const bool bForceRetarget) const
 {
 	if (!IsValid(Attacker) || !IsValid(Attacker->GetCombatantActor()) || !IsValid(TargetActor))
 	{
@@ -441,35 +560,70 @@ int32 UARPGCombatCoordinationComponent::FindBestPressureCandidate(const UARPGCom
 	const FVector AttackerLocation = Attacker->GetCombatantActor()->GetActorLocation();
 	const FVector TargetLocation = TargetActor->GetActorLocation();
 
-	int32 BestIndex = INDEX_NONE;
-	float BestDistanceSquared = FLT_MAX;
+	const FARPGCombatAssignment* ExistingAssignment = Assignments.Find(Attacker);
 
-	for (int32 Index = 0; Index < Candidates.Num(); ++Index)
+	FVector ExistingLocation = FVector::ZeroVector;
+	bool bHasExistingPressureLocation = false;
+
+	if (ExistingAssignment && ExistingAssignment->State == EARPGEngagementState::Pressure
+		&& Candidates.IsValidIndex(ExistingAssignment->CandidateIndex))
 	{
-		const FVector CandidateLocation = GetCandidateWorldLocation(Index);
-
-		if (FVector::DistSquared2D(TargetLocation, CandidateLocation) < FMath::Square(PressureMinDistance))
-		{
-			continue;
-		}
-
-		if (!CanOccupyCandidate(Attacker, Index, PendingAssignments))
-		{
-			continue;
-		}
-
-		const float DistanceSquared = FVector::DistSquared2D(AttackerLocation, CandidateLocation);
-
-		if (DistanceSquared >= BestDistanceSquared)
-		{
-			continue;
-		}
-
-		BestDistanceSquared = DistanceSquared;
-		BestIndex = Index;
+		ExistingLocation = GetCandidateWorldLocation(ExistingAssignment->CandidateIndex);
+		bHasExistingPressureLocation = true;
 	}
 
-	return BestIndex;
+	auto FindCandidate = [&](const bool bRequireMovement)
+	{
+		int32 BestIndex = INDEX_NONE;
+		float BestValue = FLT_MAX;
+
+		for (int32 Index = 0; Index < Candidates.Num(); ++Index)
+		{
+			const FVector CandidateLocation = GetCandidateWorldLocation(Index);
+			const float TargetDistance = FVector::Dist2D(TargetLocation, CandidateLocation);
+
+			if (TargetDistance < PressureMinDistance)
+			{
+				continue;
+			}
+
+			if (bRequireMovement && bHasExistingPressureLocation
+				&& FVector::DistSquared2D(ExistingLocation, CandidateLocation) < FMath::Square(PressureRetargetMinMoveDistance))
+			{
+				continue;
+			}
+
+			if (!CanOccupyCandidate(Attacker, Index, PendingAssignments))
+			{
+				continue;
+			}
+
+			const float TravelDistance = FVector::Dist2D(AttackerLocation, CandidateLocation);
+			const float Value = TargetDistance * PressureRadialWeight + TravelDistance;
+
+			if (Value >= BestValue)
+			{
+				continue;
+			}
+
+			BestValue = Value;
+			BestIndex = Index;
+		}
+
+		return BestIndex;
+	};
+
+	if (bForceRetarget)
+	{
+		const int32 RetargetIndex = FindCandidate(true);
+
+		if (RetargetIndex != INDEX_NONE)
+		{
+			return RetargetIndex;
+		}
+	}
+
+	return FindCandidate(false);
 }
 
 bool UARPGCombatCoordinationComponent::CanOccupyCandidate(const UARPGCombatantComponent* Attacker, const int32 CandidateIndex,
@@ -501,6 +655,33 @@ bool UARPGCombatCoordinationComponent::CanOccupyCandidate(const UARPGCombatantCo
 	}
 
 	return true;
+}
+
+bool UARPGCombatCoordinationComponent::IsPressureRetargetDue(const UARPGCombatantComponent* Attacker,
+	const double CurrentTime) const
+{
+	if (!IsValid(Attacker))
+	{
+		return false;
+	}
+
+	const double* NextRetargetTime = NextPressureRetargetTimes.Find(Attacker);
+
+	return !NextRetargetTime || CurrentTime >= *NextRetargetTime;
+}
+
+void UARPGCombatCoordinationComponent::ScheduleNextPressureRetarget(UARPGCombatantComponent* Attacker,
+	const double CurrentTime)
+{
+	if (!IsValid(Attacker))
+	{
+		return;
+	}
+
+	const float MaxInterval = FMath::Max(PressureRetargetMinInterval, PressureRetargetMaxInterval);
+	const float Delay = FMath::FRandRange(PressureRetargetMinInterval, MaxInterval);
+
+	NextPressureRetargetTimes.FindOrAdd(Attacker) = CurrentTime + Delay;
 }
 
 FVector UARPGCombatCoordinationComponent::GetCandidateWorldLocation(const int32 CandidateIndex) const

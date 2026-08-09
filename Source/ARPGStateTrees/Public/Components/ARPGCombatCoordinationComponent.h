@@ -66,10 +66,13 @@ protected:
 	int32 FindBestEngagementCandidate(const UARPGCombatantComponent* Attacker,
 		const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const;
 	int32 FindBestPressureCandidate(const UARPGCombatantComponent* Attacker,
-		const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const;
+	const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments, bool bForceRetarget) const;
 
 	bool CanOccupyCandidate(const UARPGCombatantComponent* Attacker, int32 CandidateIndex,
 		const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const;
+	
+	bool IsPressureRetargetDue(const UARPGCombatantComponent* Attacker, double CurrentTime) const;
+	void ScheduleNextPressureRetarget(UARPGCombatantComponent* Attacker, double CurrentTime);
 
 	FVector GetCandidateWorldLocation(int32 CandidateIndex) const;
 
@@ -92,10 +95,25 @@ protected:
 	float FieldRefreshDistance = 200.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination")
-	float PressureMinDistance = 275.0f;
+	float PressureMinDistance = 150.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination")
 	float AssignmentSeparation = 10.0f;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination", meta = (ClampMin = "0.05"))
+	float AssignmentReevaluationInterval = 0.35f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Pressure", meta = (ClampMin = "0.05"))
+	float PressureRetargetMinInterval = 0.45f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Pressure", meta = (ClampMin = "0.05"))
+	float PressureRetargetMaxInterval = 0.85f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Pressure", meta = (ClampMin = "0.0"))
+	float PressureRetargetMinMoveDistance = 100.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Pressure", meta = (ClampMin = "0.0"))
+	float PressureRadialWeight = 2.0f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> TargetActor;
@@ -105,6 +123,7 @@ protected:
 
 	TArray<FARPGCoordinationCandidate> Candidates;
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment> Assignments;
+	TMap<TWeakObjectPtr<UARPGCombatantComponent>, double> NextPressureRetargetTimes;
 
 	FVector FieldOrigin = FVector::ZeroVector;
 	FVector PendingQueryOrigin = FVector::ZeroVector;
@@ -113,6 +132,8 @@ protected:
 	FTimerHandle CoordinationTimer;
 
 	int32 ActiveQueryId = INDEX_NONE;
+	
+	float LastAssignmentReevaluationTime = 0.0;
 
 	bool bFieldInitialized = false;
 	bool bAssignmentsDirty = false;
