@@ -11,6 +11,7 @@ class UARPGCombatantComponent;
 
 DECLARE_MULTICAST_DELEGATE(FARPGCoordinationChanged);
 DECLARE_MULTICAST_DELEGATE_OneParam(FARPGCombatantAttackCompleted, UARPGCombatantComponent*);
+DECLARE_MULTICAST_DELEGATE_OneParam(FARPGAttackOpportunityChanged, bool);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FARPGCombatantTargetChanged, UARPGCombatantComponent*, UARPGCombatantComponent*);
 
 /**
@@ -31,6 +32,7 @@ public:
 	void SetTargetable(bool bNewTargetable);
 	void SetCurrentTarget(UARPGCombatantComponent* NewTarget);
 	void SetCoordination(EARPGEngagementState NewState, const FVector& NewLocation);
+	void SetTargetInAttackRange(bool bInRange);
 
 	EARPGCombatTeam GetTeam() const;
 	bool IsTargetable() const;
@@ -43,9 +45,12 @@ public:
 	float GetMaxEngagementDistance() const;
 	int32 GetEngagementPriority() const;
 
+	float GetBasicAttackRange() const;
+	bool IsTargetInAttackRange() const;
+
 	AActor* GetCombatantActor() const;
 	UARPGCombatantComponent* GetCurrentTarget() const;
-	
+
 	void NotifyAttackCompleted();
 
 	int32 GetMinAttacksBeforeReposition() const;
@@ -53,6 +58,7 @@ public:
 
 	FARPGCombatantTargetChanged OnTargetChanged;
 	FARPGCombatantAttackCompleted OnAttackCompleted;
+	FARPGAttackOpportunityChanged OnAttackOpportunityChanged;
 	FARPGCoordinationChanged OnCoordinationChanged;
 
 protected:
@@ -76,6 +82,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Engagement", meta = (ClampMin = "1"))
 	int32 MaxAttacksBeforeReposition = 4;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Attack", meta = (ClampMin = "0.0"))
+	float BasicAttackRange = 165.0f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> CombatantActor;
@@ -85,6 +94,9 @@ protected:
 
 	UPROPERTY(Transient)
 	FVector EngagementLocation = FVector::ZeroVector;
+	
+	UPROPERTY(Transient)
+	bool bTargetInAttackRange = false;
 
 	TWeakObjectPtr<UARPGCombatantComponent> CurrentTarget;
 };

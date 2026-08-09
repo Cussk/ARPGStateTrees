@@ -86,6 +86,24 @@ EStateTreeRunStatus FARPGStateTreeCombatContextTask::EnterState(FStateTreeExecut
 				WeakContext.SendEvent(ARPGGameplayTags::StateTreeEvent_CombatGoalChanged, FConstStructView(), FName(TEXT("CombatGoal")));
 			}
 		});
+	
+	InstanceData.AttackOpportunityChangedHandle = InstanceData.CombatantComponent->OnAttackOpportunityChanged.AddLambda(
+	[InstanceDataRef, WeakContext](const bool bInRange) mutable
+	{
+		FInstanceDataType* Data = InstanceDataRef.GetPtr();
+
+		if (!Data)
+		{
+			return;
+		}
+
+		Data->bTargetInAttackRange = bInRange;
+
+		if (bInRange)
+		{
+			WeakContext.SendEvent(ARPGGameplayTags::StateTreeEvent_AttackOpportunity, FConstStructView(),FName(TEXT("AttackOpportunity")));
+		}
+	});
 
 	return EStateTreeRunStatus::Running;
 }
@@ -98,10 +116,13 @@ void FARPGStateTreeCombatContextTask::ExitState(FStateTreeExecutionContext& Cont
 	{
 		InstanceData.CombatantComponent->OnTargetChanged.Remove(InstanceData.TargetChangedHandle);
 		InstanceData.CombatantComponent->OnCoordinationChanged.Remove(InstanceData.CoordinationChangedHandle);
+		InstanceData.CombatantComponent->OnAttackOpportunityChanged.Remove(InstanceData.AttackOpportunityChangedHandle);
 	}
 
 	InstanceData.TargetChangedHandle.Reset();
 	InstanceData.CoordinationChangedHandle.Reset();
+	InstanceData.AttackOpportunityChangedHandle.Reset();
+	
 	InstanceData.CombatantComponent = nullptr;
 }
 
@@ -128,4 +149,9 @@ void FARPGStateTreeCombatContextTask::UpdateCoordination(FInstanceDataType& Inst
 
 	InstanceData.EngagementState = InstanceData.CombatantComponent->GetEngagementState();
 	InstanceData.EngagementLocation = InstanceData.CombatantComponent->GetEngagementLocation();
+}
+
+void FARPGStateTreeCombatContextTask::UpdateAttackOpportunity(FInstanceDataType& InstanceData)
+{
+	InstanceData.bTargetInAttackRange = IsValid(InstanceData.CombatantComponent) && InstanceData.CombatantComponent->IsTargetInAttackRange();
 }

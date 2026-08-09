@@ -29,9 +29,13 @@ struct FARPGStateTreeCombatContextTaskInstanceData
 
 	UPROPERTY(VisibleAnywhere, Category = "Output")
 	TObjectPtr<UARPGCombatantComponent> CombatantComponent;
+	
+	UPROPERTY(VisibleAnywhere, Category = "Output")
+	bool bTargetInAttackRange = false;
 
 	FDelegateHandle TargetChangedHandle;
 	FDelegateHandle CoordinationChangedHandle;
+	FDelegateHandle AttackOpportunityChangedHandle;
 };
 
 /**
@@ -53,4 +57,5 @@ struct ARPGSTATETREES_API FARPGStateTreeCombatContextTask : public FStateTreeTas
 private:
 	static void UpdateTarget(FInstanceDataType& InstanceData);
 	static void UpdateCoordination(FInstanceDataType& InstanceData);
+	static void UpdateAttackOpportunity(FInstanceDataType& InstanceData);
 };

@@ -27,6 +27,7 @@ void UARPGCombatCoordinationComponent::EndPlay(const EEndPlayReason::Type EndPla
 		if (UARPGCombatantComponent* Attacker = WeakAttacker.Get())
 		{
 			UnbindAttackerEvents(Attacker);
+			Attacker->SetTargetInAttackRange(false);
 			Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
 		}
 	}
@@ -73,6 +74,7 @@ void UARPGCombatCoordinationComponent::UnregisterAttacker(UARPGCombatantComponen
 	RemainingAttacksBeforeReposition.Remove(Attacker);
 	EngagementRepositionRequests.Remove(Attacker);
 
+	Attacker->SetTargetInAttackRange(false);
 	Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
 
 	bAssignmentsDirty = true;
@@ -203,6 +205,10 @@ bool UARPGCombatCoordinationComponent::UpdateCoordinatedAttackers()
 		}
 
 		const float DistanceSquared = FVector::DistSquared2D(TargetLocation, Attacker->GetCombatantActor()->GetActorLocation());
+
+		const bool bTargetInAttackRange = DistanceSquared <= FMath::Square(Attacker->GetBasicAttackRange());
+		Attacker->SetTargetInAttackRange(bTargetInAttackRange);
+
 		const bool bIsCoordinated = CoordinatedAttackers.Contains(Attacker);
 
 		if (bIsCoordinated)

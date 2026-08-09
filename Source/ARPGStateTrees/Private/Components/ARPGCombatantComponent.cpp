@@ -60,6 +60,9 @@ void UARPGCombatantComponent::SetCurrentTarget(UARPGCombatantComponent* NewTarge
 	}
 
 	UARPGCombatantComponent* PreviousTarget = CurrentTarget.Get();
+
+	SetTargetInAttackRange(false);
+
 	CurrentTarget = NewTarget;
 
 	OnTargetChanged.Broadcast(PreviousTarget, NewTarget);
@@ -76,6 +79,27 @@ void UARPGCombatantComponent::SetCoordination(const EARPGEngagementState NewStat
 	EngagementLocation = NewLocation;
 
 	OnCoordinationChanged.Broadcast();
+}
+
+void UARPGCombatantComponent::SetTargetInAttackRange(const bool bInRange)
+{
+	if (bTargetInAttackRange == bInRange)
+	{
+		return;
+	}
+
+	bTargetInAttackRange = bInRange;
+	OnAttackOpportunityChanged.Broadcast(bTargetInAttackRange);
+}
+
+float UARPGCombatantComponent::GetBasicAttackRange() const
+{
+	return BasicAttackRange;
+}
+
+bool UARPGCombatantComponent::IsTargetInAttackRange() const
+{
+	return bTargetInAttackRange;
 }
 
 EARPGCombatTeam UARPGCombatantComponent::GetTeam() const
