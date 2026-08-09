@@ -10,6 +10,7 @@
 class UARPGCombatantComponent;
 
 DECLARE_MULTICAST_DELEGATE(FARPGCoordinationChanged);
+DECLARE_MULTICAST_DELEGATE_OneParam(FARPGCombatantAttackCompleted, UARPGCombatantComponent*);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FARPGCombatantTargetChanged, UARPGCombatantComponent*, UARPGCombatantComponent*);
 
 /**
@@ -44,8 +45,14 @@ public:
 
 	AActor* GetCombatantActor() const;
 	UARPGCombatantComponent* GetCurrentTarget() const;
+	
+	void NotifyAttackCompleted();
+
+	int32 GetMinAttacksBeforeReposition() const;
+	int32 GetMaxAttacksBeforeReposition() const;
 
 	FARPGCombatantTargetChanged OnTargetChanged;
+	FARPGCombatantAttackCompleted OnAttackCompleted;
 	FARPGCoordinationChanged OnCoordinationChanged;
 
 protected:
@@ -63,6 +70,12 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Engagement")
 	int32 EngagementPriority = 0;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Engagement", meta = (ClampMin = "1"))
+	int32 MinAttacksBeforeReposition = 2;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Engagement", meta = (ClampMin = "1"))
+	int32 MaxAttacksBeforeReposition = 4;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> CombatantActor;

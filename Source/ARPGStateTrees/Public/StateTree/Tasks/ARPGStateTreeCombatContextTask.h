@@ -27,7 +27,7 @@ struct FARPGStateTreeCombatContextTaskInstanceData
 	UPROPERTY(VisibleAnywhere, Category = "Output")
 	FVector EngagementLocation = FVector::ZeroVector;
 
-	UPROPERTY(Transient)
+	UPROPERTY(VisibleAnywhere, Category = "Output")
 	TObjectPtr<UARPGCombatantComponent> CombatantComponent;
 
 	FDelegateHandle TargetChangedHandle;

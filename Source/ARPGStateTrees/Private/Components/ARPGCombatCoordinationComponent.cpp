@@ -26,9 +26,12 @@ void UARPGCombatCoordinationComponent::EndPlay(const EEndPlayReason::Type EndPla
 	{
 		if (UARPGCombatantComponent* Attacker = WeakAttacker.Get())
 		{
+			UnbindAttackerEvents(Attacker);
 			Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
 		}
 	}
+
+	AttackCompletedDelegateHandles.Reset();
 
 	Attackers.Reset();
 	CoordinatedAttackers.Reset();
@@ -45,6 +48,8 @@ void UARPGCombatCoordinationComponent::RegisterAttacker(UARPGCombatantComponent*
 	}
 
 	Attackers.Add(Attacker);
+	BindAttackerEvents(Attacker);
+
 	bAssignmentsDirty = true;
 
 	if (Attackers.Num() == 1)
@@ -60,9 +65,13 @@ void UARPGCombatCoordinationComponent::UnregisterAttacker(UARPGCombatantComponen
 		return;
 	}
 
+	UnbindAttackerEvents(Attacker);
+
 	CoordinatedAttackers.Remove(Attacker);
 	Assignments.Remove(Attacker);
 	NextPressureRetargetTimes.Remove(Attacker);
+	RemainingAttacksBeforeReposition.Remove(Attacker);
+	EngagementRepositionRequests.Remove(Attacker);
 
 	Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
 
@@ -106,6 +115,8 @@ void UARPGCombatCoordinationComponent::StopCoordination()
 	Assignments.Reset();
 	CoordinatedAttackers.Reset();
 	NextPressureRetargetTimes.Reset();
+	RemainingAttacksBeforeReposition.Reset();
+	EngagementRepositionRequests.Reset();
 	LastAssignmentReevaluationTime = 0.0;
 
 	bFieldInitialized = false;
@@ -201,6 +212,8 @@ bool UARPGCombatCoordinationComponent::UpdateCoordinatedAttackers()
 				CoordinatedAttackers.Remove(Attacker);
 				Assignments.Remove(Attacker);
 				NextPressureRetargetTimes.Remove(Attacker);
+				RemainingAttacksBeforeReposition.Remove(Attacker);
+				EngagementRepositionRequests.Remove(Attacker);
 				Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
 				bChanged = true;
 			}
@@ -276,7 +289,7 @@ void UARPGCombatCoordinationComponent::RebuildAssignments()
 
 	const FVector TargetLocation = TargetActor->GetActorLocation();
 
-	SortedAttackers.Sort([TargetLocation](const UARPGCombatantComponent& A, const UARPGCombatantComponent& B)
+	SortedAttackers.Sort([this, TargetLocation](const UARPGCombatantComponent& A, const UARPGCombatantComponent& B)
 	{
 		if (A.GetEngagementPriority() != B.GetEngagementPriority())
 		{
@@ -289,6 +302,17 @@ void UARPGCombatCoordinationComponent::RebuildAssignments()
 		if (bAEngaged != bBEngaged)
 		{
 			return bAEngaged;
+		}
+
+		if (bAEngaged && bBEngaged)
+		{
+			const bool bARepositioning = IsEngagementRepositionRequested(&A);
+			const bool bBRepositioning = IsEngagementRepositionRequested(&B);
+
+			if (bARepositioning != bBRepositioning)
+			{
+				return !bARepositioning;
+			}
 		}
 
 		const float DistanceA = FVector::DistSquared2D(A.GetCombatantActor()->GetActorLocation(), TargetLocation);
@@ -324,9 +348,31 @@ void UARPGCombatCoordinationComponent::BuildEngagementAssignments(const TArray<U
 		int32 CandidateIndex = INDEX_NONE;
 
 		const FARPGCombatAssignment* ExistingAssignment = Assignments.Find(Attacker);
+		const bool bHasExistingEngagement = ExistingAssignment
+			&& ExistingAssignment->State == EARPGEngagementState::Engaged
+			&& Candidates.IsValidIndex(ExistingAssignment->CandidateIndex);
 
-		if (ExistingAssignment && ExistingAssignment->State == EARPGEngagementState::Engaged
-			&& Candidates.IsValidIndex(ExistingAssignment->CandidateIndex))
+		const bool bRepositionRequested = IsEngagementRepositionRequested(Attacker);
+
+		if (bHasExistingEngagement && !bRepositionRequested)
+		{
+			const FVector CandidateLocation = GetCandidateWorldLocation(ExistingAssignment->CandidateIndex);
+			const float TargetDistanceSquared = FVector::DistSquared2D(TargetActor->GetActorLocation(), CandidateLocation);
+
+			if (TargetDistanceSquared <= FMath::Square(Attacker->GetMaxEngagementDistance())
+				&& CanOccupyCandidate(Attacker, ExistingAssignment->CandidateIndex, PendingAssignments))
+			{
+				CandidateIndex = ExistingAssignment->CandidateIndex;
+			}
+		}
+
+		if (CandidateIndex == INDEX_NONE && bHasExistingEngagement && bRepositionRequested)
+		{
+			CandidateIndex = FindBestEngagementCandidate(
+				Attacker, PendingAssignments, true, ExistingAssignment->CandidateIndex);
+		}
+
+		if (CandidateIndex == INDEX_NONE && bHasExistingEngagement)
 		{
 			const FVector CandidateLocation = GetCandidateWorldLocation(ExistingAssignment->CandidateIndex);
 			const float TargetDistanceSquared = FVector::DistSquared2D(TargetActor->GetActorLocation(), CandidateLocation);
@@ -452,29 +498,48 @@ void UARPGCombatCoordinationComponent::CommitAssignments(
 		if (!NewAssignment || !Candidates.IsValidIndex(NewAssignment->CandidateIndex))
 		{
 			NextPressureRetargetTimes.Remove(Attacker);
+			RemainingAttacksBeforeReposition.Remove(Attacker);
+
 			Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
 			continue;
 		}
 
+		const bool bWasEngaged = PreviousAssignment && PreviousAssignment->State == EARPGEngagementState::Engaged;
 		const bool bWasPressure = PreviousAssignment && PreviousAssignment->State == EARPGEngagementState::Pressure;
+		const bool bRepositionRequested = EngagementRepositionRequests.Contains(WeakAttacker);
 		const bool bPressureRetargetWasDue = bWasPressure && IsPressureRetargetDue(Attacker, CurrentTime);
 
-		if (NewAssignment->State == EARPGEngagementState::Pressure)
+		if (NewAssignment->State == EARPGEngagementState::Engaged)
 		{
-			if (!bWasPressure || bPressureRetargetWasDue)
+			NextPressureRetargetTimes.Remove(Attacker);
+
+			if (!bWasEngaged || bRepositionRequested)
 			{
-				ScheduleNextPressureRetarget(Attacker, CurrentTime);
+				ResetEngagementAttackCount(Attacker);
 			}
 		}
 		else
 		{
-			NextPressureRetargetTimes.Remove(Attacker);
+			RemainingAttacksBeforeReposition.Remove(Attacker);
+
+			if (NewAssignment->State == EARPGEngagementState::Pressure)
+			{
+				if (!bWasPressure || bPressureRetargetWasDue)
+				{
+					ScheduleNextPressureRetarget(Attacker, CurrentTime);
+				}
+			}
+			else
+			{
+				NextPressureRetargetTimes.Remove(Attacker);
+			}
 		}
 
 		Attacker->SetCoordination(NewAssignment->State, GetCandidateWorldLocation(NewAssignment->CandidateIndex));
 	}
 
 	Assignments = MoveTemp(PendingAssignments);
+	EngagementRepositionRequests.Reset();
 }
 
 void UARPGCombatCoordinationComponent::UpdateAssignmentGoals()
@@ -507,7 +572,8 @@ void UARPGCombatCoordinationComponent::UpdateAssignmentGoals()
 }
 
 int32 UARPGCombatCoordinationComponent::FindBestEngagementCandidate(const UARPGCombatantComponent* Attacker,
-	const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const
+	const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments,
+	const bool bForceReposition, const int32 ExistingCandidateIndex) const
 {
 	if (!IsValid(Attacker) || !IsValid(Attacker->GetCombatantActor()) || !IsValid(TargetActor))
 	{
@@ -517,6 +583,14 @@ int32 UARPGCombatCoordinationComponent::FindBestEngagementCandidate(const UARPGC
 	const FVector AttackerLocation = Attacker->GetCombatantActor()->GetActorLocation();
 	const FVector TargetLocation = TargetActor->GetActorLocation();
 
+	FVector ExistingLocation = FVector::ZeroVector;
+	const bool bHasExistingLocation = bForceReposition && Candidates.IsValidIndex(ExistingCandidateIndex);
+
+	if (bHasExistingLocation)
+	{
+		ExistingLocation = GetCandidateWorldLocation(ExistingCandidateIndex);
+	}
+
 	int32 BestIndex = INDEX_NONE;
 	float BestDistanceSquared = FLT_MAX;
 
@@ -525,6 +599,12 @@ int32 UARPGCombatCoordinationComponent::FindBestEngagementCandidate(const UARPGC
 		const FVector CandidateLocation = GetCandidateWorldLocation(Index);
 
 		if (FVector::DistSquared2D(TargetLocation, CandidateLocation) > FMath::Square(Attacker->GetMaxEngagementDistance()))
+		{
+			continue;
+		}
+
+		if (bHasExistingLocation
+			&& FVector::DistSquared2D(ExistingLocation, CandidateLocation) < FMath::Square(EngagementRepositionMinMoveDistance))
 		{
 			continue;
 		}
@@ -682,6 +762,98 @@ void UARPGCombatCoordinationComponent::ScheduleNextPressureRetarget(UARPGCombata
 	const float Delay = FMath::FRandRange(PressureRetargetMinInterval, MaxInterval);
 
 	NextPressureRetargetTimes.FindOrAdd(Attacker) = CurrentTime + Delay;
+}
+
+void UARPGCombatCoordinationComponent::HandleAttackerAttackCompleted(UARPGCombatantComponent* Attacker)
+{
+	if (!IsValid(Attacker) || EngagementRepositionRequests.Contains(Attacker))
+	{
+		return;
+	}
+
+	const FARPGCombatAssignment* Assignment = Assignments.Find(Attacker);
+
+	if (!Assignment || Assignment->State != EARPGEngagementState::Engaged)
+	{
+		return;
+	}
+
+	int32* RemainingAttacks = RemainingAttacksBeforeReposition.Find(Attacker);
+
+	if (!RemainingAttacks)
+	{
+		ResetEngagementAttackCount(Attacker);
+		RemainingAttacks = RemainingAttacksBeforeReposition.Find(Attacker);
+	}
+
+	if (!RemainingAttacks)
+	{
+		return;
+	}
+
+	--(*RemainingAttacks);
+
+	if (*RemainingAttacks > 0)
+	{
+		return;
+	}
+
+	EngagementRepositionRequests.Add(Attacker);
+	bAssignmentsDirty = true;
+}
+
+void UARPGCombatCoordinationComponent::ResetEngagementAttackCount(UARPGCombatantComponent* Attacker)
+{
+	if (!IsValid(Attacker))
+	{
+		return;
+	}
+
+	const int32 MinAttacks = FMath::Max(1, Attacker->GetMinAttacksBeforeReposition());
+	const int32 MaxAttacks = FMath::Max(MinAttacks, Attacker->GetMaxAttacksBeforeReposition());
+
+	RemainingAttacksBeforeReposition.FindOrAdd(Attacker) = FMath::RandRange(MinAttacks, MaxAttacks);
+}
+
+bool UARPGCombatCoordinationComponent::IsEngagementRepositionRequested(const UARPGCombatantComponent* Attacker) const
+{
+	if (!IsValid(Attacker))
+	{
+		return false;
+	}
+
+	return EngagementRepositionRequests.Contains(Attacker);
+}
+
+void UARPGCombatCoordinationComponent::BindAttackerEvents(UARPGCombatantComponent* Attacker)
+{
+	if (!IsValid(Attacker) || AttackCompletedDelegateHandles.Contains(Attacker))
+	{
+		return;
+	}
+
+	const FDelegateHandle Handle = Attacker->OnAttackCompleted.AddUObject(
+		this, &UARPGCombatCoordinationComponent::HandleAttackerAttackCompleted);
+
+	AttackCompletedDelegateHandles.Add(Attacker, Handle);
+}
+
+void UARPGCombatCoordinationComponent::UnbindAttackerEvents(UARPGCombatantComponent* Attacker)
+{
+	if (!IsValid(Attacker))
+	{
+		return;
+	}
+
+	const FDelegateHandle* Handle = AttackCompletedDelegateHandles.Find(Attacker);
+
+	if (!Handle)
+	{
+		return;
+	}
+
+	Attacker->OnAttackCompleted.Remove(*Handle);
+	AttackCompletedDelegateHandles.Remove(Attacker);
 }
 
 FVector UARPGCombatCoordinationComponent::GetCandidateWorldLocation(const int32 CandidateIndex) const

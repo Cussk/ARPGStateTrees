@@ -132,3 +132,18 @@ UARPGCombatantComponent* UARPGCombatantComponent::GetCurrentTarget() const
 {
 	return CurrentTarget.Get();
 }
+
+void UARPGCombatantComponent::NotifyAttackCompleted()
+{
+	OnAttackCompleted.Broadcast(this);
+}
+
+int32 UARPGCombatantComponent::GetMinAttacksBeforeReposition() const
+{
+	return MinAttacksBeforeReposition;
+}
+
+int32 UARPGCombatantComponent::GetMaxAttacksBeforeReposition() const
+{
+	return MaxAttacksBeforeReposition;
+}

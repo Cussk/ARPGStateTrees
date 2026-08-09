@@ -63,8 +63,8 @@ protected:
 	void CommitAssignments(TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments);
 	void UpdateAssignmentGoals();
 
-	int32 FindBestEngagementCandidate(const UARPGCombatantComponent* Attacker,
-		const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const;
+	int32 FindBestEngagementCandidate(const UARPGCombatantComponent* Attacker, const TMap<TWeakObjectPtr<UARPGCombatantComponent>, 
+		FARPGCombatAssignment>& PendingAssignments, bool bForceReposition = false, int32 ExistingCandidateIndex = INDEX_NONE) const;
 	int32 FindBestPressureCandidate(const UARPGCombatantComponent* Attacker,
 	const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments, bool bForceRetarget) const;
 
@@ -73,6 +73,14 @@ protected:
 	
 	bool IsPressureRetargetDue(const UARPGCombatantComponent* Attacker, double CurrentTime) const;
 	void ScheduleNextPressureRetarget(UARPGCombatantComponent* Attacker, double CurrentTime);
+	
+	void HandleAttackerAttackCompleted(UARPGCombatantComponent* Attacker);
+
+	void BindAttackerEvents(UARPGCombatantComponent* Attacker);
+	void UnbindAttackerEvents(UARPGCombatantComponent* Attacker);
+
+	void ResetEngagementAttackCount(UARPGCombatantComponent* Attacker);
+	bool IsEngagementRepositionRequested(const UARPGCombatantComponent* Attacker) const;
 
 	FVector GetCandidateWorldLocation(int32 CandidateIndex) const;
 
@@ -102,6 +110,9 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination", meta = (ClampMin = "0.05"))
 	float AssignmentReevaluationInterval = 0.35f;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Engagement", meta = (ClampMin = "0.0"))
+	float EngagementRepositionMinMoveDistance = 60.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Pressure", meta = (ClampMin = "0.05"))
 	float PressureRetargetMinInterval = 0.45f;
@@ -120,10 +131,13 @@ protected:
 
 	TSet<TWeakObjectPtr<UARPGCombatantComponent>> Attackers;
 	TSet<TWeakObjectPtr<UARPGCombatantComponent>> CoordinatedAttackers;
+	TSet<TWeakObjectPtr<UARPGCombatantComponent>> EngagementRepositionRequests;
 
 	TArray<FARPGCoordinationCandidate> Candidates;
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment> Assignments;
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, double> NextPressureRetargetTimes;
+	TMap<TWeakObjectPtr<UARPGCombatantComponent>, int32> RemainingAttacksBeforeReposition;
+	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FDelegateHandle> AttackCompletedDelegateHandles;
 
 	FVector FieldOrigin = FVector::ZeroVector;
 	FVector PendingQueryOrigin = FVector::ZeroVector;
