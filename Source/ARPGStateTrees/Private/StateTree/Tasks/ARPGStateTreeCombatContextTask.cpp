@@ -42,6 +42,7 @@ EStateTreeRunStatus FARPGStateTreeCombatContextTask::EnterState(FStateTreeExecut
 
 	UpdateTarget(InstanceData);
 	UpdateCoordination(InstanceData);
+	UpdateAttackOpportunity(InstanceData);
 
 	TStateTreeInstanceDataStructRef<FInstanceDataType> InstanceDataRef = Context.GetInstanceDataStructRef(*this);
 	const FStateTreeWeakExecutionContext WeakContext = Context.MakeWeakExecutionContext();

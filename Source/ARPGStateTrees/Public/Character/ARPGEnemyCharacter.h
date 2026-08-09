@@ -8,6 +8,7 @@
 
 class UARPGCombatantComponent;
 class UStateTree;
+class UAnimMontage;
 
 UCLASS()
 class ARPGSTATETREES_API AARPGEnemyCharacter : public ACharacter
@@ -22,6 +23,8 @@ public:
 	
 	UFUNCTION(BlueprintPure)
 	UStateTree* GetStateTreeAsset() const;
+	
+	float PlayMontage(UAnimMontage* Montage, FOnMontageBlendingOutStarted& BlendOutDelegate, float PlayRate = 1.0f) const;
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
