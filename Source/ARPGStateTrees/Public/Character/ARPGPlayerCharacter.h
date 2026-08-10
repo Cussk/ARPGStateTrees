@@ -3,29 +3,25 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Character.h"
-#include "ARPGCharacter.generated.h"
+#include "Character/ARPGCharacterBase.h"
+#include "ARPGPlayerCharacter.generated.h"
 
 class UARPGCombatCoordinationComponent;
-class UARPGCombatantComponent;
 class UARPGNavigationComponent;
 class UCameraComponent;
 class USpringArmComponent;
 
 UCLASS()
-class ARPGSTATETREES_API AARPGCharacter : public ACharacter
+class ARPGSTATETREES_API AARPGPlayerCharacter : public AARPGCharacterBase
 {
 	GENERATED_BODY()
 
 public:
-	AARPGCharacter();
+	AARPGPlayerCharacter();
 	virtual void BeginPlay() override;
 	
 	UFUNCTION(BlueprintPure)
 	UARPGNavigationComponent* GetARPGNavigationComponent() const;
-	
-	UFUNCTION(BlueprintPure)
-	UARPGCombatantComponent* GetCombatantComponent() const;
 	
 	UFUNCTION(BlueprintPure)
 	UARPGCombatCoordinationComponent* GetCombatCoordinationComponent() const;
@@ -39,9 +35,6 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Navigation")
 	TObjectPtr<UARPGNavigationComponent> NavigationComponent;
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
-	TObjectPtr<UARPGCombatantComponent> CombatantComponent;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	TObjectPtr<UARPGCombatCoordinationComponent> CombatCoordinationComponent;

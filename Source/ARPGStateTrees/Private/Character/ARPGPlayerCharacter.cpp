@@ -1,7 +1,7 @@
 ﻿// Copyright Kyle Cuss and Cuss Programming 2026.
 
 
-#include "Character/ARPGCharacter.h"
+#include "Character/ARPGPlayerCharacter.h"
 
 #include "Camera/CameraComponent.h"
 #include "Components/ARPGCombatantComponent.h"
@@ -10,7 +10,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 
-AARPGCharacter::AARPGCharacter()
+AARPGPlayerCharacter::AARPGPlayerCharacter()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	
@@ -21,7 +21,6 @@ AARPGCharacter::AARPGCharacter()
 	CameraComponent->SetupAttachment(SpringArmComponent);
 	
 	NavigationComponent = CreateDefaultSubobject<UARPGNavigationComponent>(TEXT("NavigationComponent"));
-	CombatantComponent = CreateDefaultSubobject<UARPGCombatantComponent>(TEXT("CombatantComponent"));
 	CombatCoordinationComponent = CreateDefaultSubobject<UARPGCombatCoordinationComponent>(TEXT("CombatCoordinationComponent"));
 	
 	SpringArmComponent->TargetArmLength = 900.0f;
@@ -37,23 +36,18 @@ AARPGCharacter::AARPGCharacter()
 	CombatantComponent->SetTeam(EARPGCombatTeam::Player);
 }
 
-void AARPGCharacter::BeginPlay()
+void AARPGPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	
 }
 
-UARPGNavigationComponent* AARPGCharacter::GetARPGNavigationComponent() const
+UARPGNavigationComponent* AARPGPlayerCharacter::GetARPGNavigationComponent() const
 {
 	return NavigationComponent;
 }
 
-UARPGCombatantComponent* AARPGCharacter::GetCombatantComponent() const
-{
-	return CombatantComponent;
-}
-
-UARPGCombatCoordinationComponent* AARPGCharacter::GetCombatCoordinationComponent() const
+UARPGCombatCoordinationComponent* AARPGPlayerCharacter::GetCombatCoordinationComponent() const
 {
 	return CombatCoordinationComponent;
 }

@@ -2,7 +2,7 @@
 
 #include "Player/ARPGPlayerController.h"
 
-#include "Character/ARPGCharacter.h"
+#include "Character/ARPGPlayerCharacter.h"
 #include "Components/ARPGNavigationComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -64,7 +64,7 @@ void AARPGPlayerController::SetPawn(APawn* InPawn)
 
 	NavigationComponent.Reset();
 
-	if (const AARPGCharacter* ARPGCharacter = Cast<AARPGCharacter>(InPawn))
+	if (const AARPGPlayerCharacter* ARPGCharacter = Cast<AARPGPlayerCharacter>(InPawn))
 	{
 		NavigationComponent = ARPGCharacter->GetARPGNavigationComponent();
 	}
