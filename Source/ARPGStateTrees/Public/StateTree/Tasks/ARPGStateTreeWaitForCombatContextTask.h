@@ -15,7 +15,7 @@ struct FARPGStateTreeWaitForCombatContextTaskInstanceData
 /**
  * Keeps a state active until a combat-context event causes a transition.
  */
-USTRUCT(DisplayName = "ARPG Wait For Combat Context")
+USTRUCT(DisplayName = "ARPG Wait For Combat Context", Category = "ARPG")
 struct ARPGSTATETREES_API FARPGStateTreeWaitForCombatContextTask : public FStateTreeTaskCommonBase
 {
 	GENERATED_BODY()

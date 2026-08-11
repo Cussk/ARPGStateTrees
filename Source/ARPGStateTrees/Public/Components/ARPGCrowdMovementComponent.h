@@ -1,4 +1,4 @@
-﻿// Copyright Kyle Cuss and Cuss Programming 2026.
+﻿// ARPGCrowdMovementComponent.h
 
 #pragma once
 
@@ -22,15 +22,9 @@ public:
 	void SetRightOfWayRequested(bool bRequested);
 	bool IsRightOfWayRequested() const;
 
-	void SetPassThroughActors(const TSet<AActor*>& DesiredActors);
-	void RemovePassThroughActor(AActor* Actor);
-	void ClearPassThroughActors();
-
 protected:
 	UPROPERTY(Transient)
 	TObjectPtr<ACharacter> Character;
-
-	TSet<TWeakObjectPtr<AActor>> PassThroughActors;
 
 	bool bRightOfWayRequested = false;
 };
