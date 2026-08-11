@@ -3,6 +3,7 @@
 #include "Components/ARPGCombatCoordinationComponent.h"
 
 #include "Components/ARPGCombatantComponent.h"
+#include "Components/ARPGCrowdMovementComponent.h"
 #include "EnvironmentQuery/EnvQuery.h"
 #include "EnvironmentQuery/EnvQueryManager.h"
 
@@ -50,6 +51,14 @@ void UARPGCombatCoordinationComponent::RegisterAttacker(UARPGCombatantComponent*
 
 	Attackers.Add(Attacker);
 	BindAttackerEvents(Attacker);
+	
+	if (AActor* AttackerActor = Attacker->GetCombatantActor())
+	{
+		if (UARPGCrowdMovementComponent* CrowdMovement = AttackerActor->FindComponentByClass<UARPGCrowdMovementComponent>())
+		{
+			CrowdMovementComponents.Add(Attacker, CrowdMovement);
+		}
+	}
 
 	bAssignmentsDirty = true;
 
@@ -65,6 +74,9 @@ void UARPGCombatCoordinationComponent::UnregisterAttacker(UARPGCombatantComponen
 	{
 		return;
 	}
+
+	ClearMovementRightOfWayFor(Attacker);
+	CrowdMovementComponents.Remove(Attacker);
 
 	UnbindAttackerEvents(Attacker);
 
@@ -113,12 +125,16 @@ void UARPGCombatCoordinationComponent::StopCoordination()
 		ActiveQueryId = INDEX_NONE;
 	}
 
+	ClearMovementRightOfWay();
+
 	Candidates.Reset();
 	Assignments.Reset();
 	CoordinatedAttackers.Reset();
+	CrowdMovementComponents.Reset();
 	NextPressureRetargetTimes.Reset();
 	RemainingAttacksBeforeReposition.Reset();
 	EngagementRepositionRequests.Reset();
+
 	LastAssignmentReevaluationTime = 0.0;
 
 	bFieldInitialized = false;
@@ -152,6 +168,7 @@ void UARPGCombatCoordinationComponent::UpdateCoordination()
 
 	if (CoordinatedAttackers.IsEmpty())
 	{
+		ClearMovementRightOfWay();
 		return;
 	}
 
@@ -178,6 +195,8 @@ void UARPGCombatCoordinationComponent::UpdateCoordination()
 	{
 		RebuildAssignments();
 	}
+
+	UpdateMovementRightOfWay();
 }
 
 bool UARPGCombatCoordinationComponent::UpdateCoordinatedAttackers()
@@ -831,6 +850,127 @@ bool UARPGCombatCoordinationComponent::IsEngagementRepositionRequested(const UAR
 	return EngagementRepositionRequests.Contains(Attacker);
 }
 
+void UARPGCombatCoordinationComponent::UpdateMovementRightOfWay()
+{
+	TMap<UARPGCrowdMovementComponent*, TSet<AActor*>> DesiredPassThroughActors;
+
+	for (auto Iterator = CrowdMovementComponents.CreateIterator(); Iterator; ++Iterator)
+	{
+		UARPGCombatantComponent* Combatant = Iterator.Key().Get();
+		UARPGCrowdMovementComponent* CrowdMovement = Iterator.Value().Get();
+
+		if (!IsValid(Combatant) || !IsValid(CrowdMovement))
+		{
+			if (IsValid(CrowdMovement))
+			{
+				CrowdMovement->ClearPassThroughActors();
+			}
+
+			Iterator.RemoveCurrent();
+			continue;
+		}
+
+		DesiredPassThroughActors.Add(CrowdMovement);
+	}
+
+	const float ConsiderationRadiusSquared = FMath::Square(RightOfWayConsiderationRadius);
+
+	for (const TWeakObjectPtr<UARPGCombatantComponent>& WeakMover : CoordinatedAttackers)
+	{
+		UARPGCombatantComponent* Mover = WeakMover.Get();
+
+		if (!IsValid(Mover))
+		{
+			continue;
+		}
+
+		AActor* MoverActor = Mover->GetCombatantActor();
+		UARPGCrowdMovementComponent* MoverCrowdMovement = GetCrowdMovementComponent(Mover);
+
+		if (!IsValid(MoverActor) || !IsValid(MoverCrowdMovement)
+			|| !MoverCrowdMovement->IsRightOfWayRequested()
+			|| Mover->GetEngagementState() != EARPGEngagementState::Engaged)
+		{
+			continue;
+		}
+
+		for (const TWeakObjectPtr<UARPGCombatantComponent>& WeakOther : CoordinatedAttackers)
+		{
+			UARPGCombatantComponent* Other = WeakOther.Get();
+
+			if (!IsValid(Other) || Other == Mover || !CanMovementPassThrough(Mover, Other))
+			{
+				continue;
+			}
+
+			AActor* OtherActor = Other->GetCombatantActor();
+			UARPGCrowdMovementComponent* OtherCrowdMovement = GetCrowdMovementComponent(Other);
+
+			if (!IsValid(OtherActor) || !IsValid(OtherCrowdMovement))
+			{
+				continue;
+			}
+
+			if (FVector::DistSquared2D(MoverActor->GetActorLocation(), OtherActor->GetActorLocation()) > ConsiderationRadiusSquared)
+			{
+				continue;
+			}
+
+			DesiredPassThroughActors.FindOrAdd(MoverCrowdMovement).Add(OtherActor);
+			DesiredPassThroughActors.FindOrAdd(OtherCrowdMovement).Add(MoverActor);
+		}
+	}
+
+	for (TPair<UARPGCrowdMovementComponent*, TSet<AActor*>>& Pair : DesiredPassThroughActors)
+	{
+		if (IsValid(Pair.Key))
+		{
+			Pair.Key->SetPassThroughActors(Pair.Value);
+		}
+	}
+}
+
+void UARPGCombatCoordinationComponent::ClearMovementRightOfWay()
+{
+	for (const TPair<TWeakObjectPtr<UARPGCombatantComponent>,
+		TWeakObjectPtr<UARPGCrowdMovementComponent>>& Pair : CrowdMovementComponents)
+	{
+		if (UARPGCrowdMovementComponent* CrowdMovement = Pair.Value.Get())
+		{
+			CrowdMovement->ClearPassThroughActors();
+		}
+	}
+}
+
+void UARPGCombatCoordinationComponent::ClearMovementRightOfWayFor(UARPGCombatantComponent* Attacker)
+{
+	if (!IsValid(Attacker))
+	{
+		return;
+	}
+
+	AActor* AttackerActor = Attacker->GetCombatantActor();
+
+	if (UARPGCrowdMovementComponent* CrowdMovement = GetCrowdMovementComponent(Attacker))
+	{
+		CrowdMovement->ClearPassThroughActors();
+	}
+
+	if (!IsValid(AttackerActor))
+	{
+		return;
+	}
+
+	for (const TPair<TWeakObjectPtr<UARPGCombatantComponent>,
+		TWeakObjectPtr<UARPGCrowdMovementComponent>>& Pair : CrowdMovementComponents)
+	{
+		if (UARPGCrowdMovementComponent* CrowdMovement = Pair.Value.Get())
+		{
+			CrowdMovement->RemovePassThroughActor(AttackerActor);
+		}
+	}
+}
+
 void UARPGCombatCoordinationComponent::BindAttackerEvents(UARPGCombatantComponent* Attacker)
 {
 	if (!IsValid(Attacker) || AttackCompletedDelegateHandles.Contains(Attacker))
@@ -860,6 +1000,40 @@ void UARPGCombatCoordinationComponent::UnbindAttackerEvents(UARPGCombatantCompon
 
 	Attacker->OnAttackCompleted.Remove(*Handle);
 	AttackCompletedDelegateHandles.Remove(Attacker);
+}
+
+bool UARPGCombatCoordinationComponent::CanMovementPassThrough(const UARPGCombatantComponent* Mover,
+	const UARPGCombatantComponent* Other) const
+{
+	if (!IsValid(Mover) || !IsValid(Other) || Mover == Other)
+	{
+		return false;
+	}
+
+	if (Mover->GetEngagementState() != EARPGEngagementState::Engaged)
+	{
+		return false;
+	}
+
+	if (Other->GetEngagementState() != EARPGEngagementState::Engaged)
+	{
+		return true;
+	}
+
+	return Mover->GetEngagementPriority() > Other->GetEngagementPriority();
+}
+
+UARPGCrowdMovementComponent* UARPGCombatCoordinationComponent::GetCrowdMovementComponent(
+	const UARPGCombatantComponent* Attacker) const
+{
+	if (!IsValid(Attacker))
+	{
+		return nullptr;
+	}
+
+	const TWeakObjectPtr<UARPGCrowdMovementComponent>* WeakComponent = CrowdMovementComponents.Find(Attacker);
+
+	return WeakComponent ? WeakComponent->Get() : nullptr;
 }
 
 FVector UARPGCombatCoordinationComponent::GetCandidateWorldLocation(const int32 CandidateIndex) const

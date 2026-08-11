@@ -8,6 +8,7 @@
 #include "Types/ARPGCombatTypes.h"
 #include "ARPGCombatCoordinationComponent.generated.h"
 
+class UARPGCrowdMovementComponent;
 class UARPGCombatantComponent;
 class UEnvQuery;
 
@@ -81,6 +82,13 @@ protected:
 
 	void ResetEngagementAttackCount(UARPGCombatantComponent* Attacker);
 	bool IsEngagementRepositionRequested(const UARPGCombatantComponent* Attacker) const;
+	
+	void UpdateMovementRightOfWay();
+	void ClearMovementRightOfWay();
+	void ClearMovementRightOfWayFor(UARPGCombatantComponent* Attacker);
+
+	bool CanMovementPassThrough(const UARPGCombatantComponent* Mover, const UARPGCombatantComponent* Other) const;
+	UARPGCrowdMovementComponent* GetCrowdMovementComponent(const UARPGCombatantComponent* Attacker) const;
 
 	FVector GetCandidateWorldLocation(int32 CandidateIndex) const;
 
@@ -111,6 +119,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination", meta = (ClampMin = "0.05"))
 	float AssignmentReevaluationInterval = 0.35f;
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Movement", meta = (ClampMin = "0.0"))
+	float RightOfWayConsiderationRadius = 200.0f;
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Engagement", meta = (ClampMin = "0.0"))
 	float EngagementRepositionMinMoveDistance = 60.0f;
 
@@ -138,6 +149,7 @@ protected:
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, double> NextPressureRetargetTimes;
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, int32> RemainingAttacksBeforeReposition;
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FDelegateHandle> AttackCompletedDelegateHandles;
+	TMap<TWeakObjectPtr<UARPGCombatantComponent>, TWeakObjectPtr<UARPGCrowdMovementComponent>> CrowdMovementComponents;
 
 	FVector FieldOrigin = FVector::ZeroVector;
 	FVector PendingQueryOrigin = FVector::ZeroVector;

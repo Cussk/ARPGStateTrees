@@ -3,13 +3,10 @@
 #include "Character/ARPGCharacterBase.h"
 
 #include "Components/ARPGCombatantComponent.h"
-#include "Components/CapsuleComponent.h"
 
 AARPGCharacterBase::AARPGCharacterBase()
 {
 	CombatantComponent = CreateDefaultSubobject<UARPGCombatantComponent>(TEXT("CombatantComponent"));
-	
-	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 }
 
 UARPGCombatantComponent* AARPGCharacterBase::GetCombatantComponent() const

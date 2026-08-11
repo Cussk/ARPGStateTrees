@@ -7,12 +7,15 @@
 #include "Components/ARPGCombatantComponent.h"
 #include "Components/ARPGCombatCoordinationComponent.h"
 #include "Components/ARPGNavigationComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 
 AARPGPlayerCharacter::AARPGPlayerCharacter()
 {
 	PrimaryActorTick.bCanEverTick = false;
+	
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 	
 	SpringArmComponent = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArmComponent"));
 	SpringArmComponent->SetupAttachment(RootComponent);

@@ -4,6 +4,8 @@
 
 #include "AI/ARPGEnemyAIController.h"
 #include "Components/ARPGCombatantComponent.h"
+#include "Components/ARPGCrowdMovementComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Types/ARPGCombatTypes.h"
 
@@ -11,6 +13,10 @@ AARPGEnemyCharacter::AARPGEnemyCharacter()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
+	
+	CrowdMovementComponent = CreateDefaultSubobject<UARPGCrowdMovementComponent>(TEXT("CrowdMovementComponent"));
+	
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 
 	AIControllerClass = AARPGEnemyAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
@@ -26,4 +32,9 @@ AARPGEnemyCharacter::AARPGEnemyCharacter()
 UStateTree* AARPGEnemyCharacter::GetStateTreeAsset() const
 {
 	return StateTreeAsset;
+}
+
+UARPGCrowdMovementComponent* AARPGEnemyCharacter::GetCrowdMovementComponent() const
+{
+	return CrowdMovementComponent;
 }
