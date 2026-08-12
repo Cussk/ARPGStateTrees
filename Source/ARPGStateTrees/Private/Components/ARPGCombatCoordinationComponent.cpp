@@ -29,7 +29,7 @@ void UARPGCombatCoordinationComponent::EndPlay(const EEndPlayReason::Type EndPla
 		{
 			UnbindAttackerEvents(Attacker);
 			Attacker->SetTargetInAttackRange(false);
-			Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
+			Attacker->SetCoordination(EARPGCoordinationState::None, FVector::ZeroVector);
 		}
 	}
 
@@ -37,7 +37,7 @@ void UARPGCombatCoordinationComponent::EndPlay(const EEndPlayReason::Type EndPla
 
 	Attackers.Reset();
 	CoordinatedAttackers.Reset();
-	Assignments.Reset();
+	MeleeAssignments.Reset();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -70,13 +70,13 @@ void UARPGCombatCoordinationComponent::UnregisterAttacker(UARPGCombatantComponen
 	UnbindAttackerEvents(Attacker);
 
 	CoordinatedAttackers.Remove(Attacker);
-	Assignments.Remove(Attacker);
+	MeleeAssignments.Remove(Attacker);
 	NextPressureRetargetTimes.Remove(Attacker);
 	RemainingAttacksBeforeReposition.Remove(Attacker);
 	EngagementRepositionRequests.Remove(Attacker);
 
 	Attacker->SetTargetInAttackRange(false);
-	Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
+	Attacker->SetCoordination(EARPGCoordinationState::None, FVector::ZeroVector);
 
 	bAssignmentsDirty = true;
 
@@ -115,7 +115,7 @@ void UARPGCombatCoordinationComponent::StopCoordination()
 	}
 
 	Candidates.Reset();
-	Assignments.Reset();
+	MeleeAssignments.Reset();
 	CoordinatedAttackers.Reset();
 	NextPressureRetargetTimes.Reset();
 	RemainingAttacksBeforeReposition.Reset();
@@ -199,7 +199,7 @@ bool UARPGCombatCoordinationComponent::UpdateCoordinatedAttackers()
 		if (!IsValid(Attacker) || !IsValid(Attacker->GetCombatantActor()))
 		{
 			CoordinatedAttackers.Remove(*Iterator);
-			Assignments.Remove(*Iterator);
+			MeleeAssignments.Remove(*Iterator);
 			NextPressureRetargetTimes.Remove(*Iterator);
 			Iterator.RemoveCurrent();
 			bChanged = true;			
@@ -218,11 +218,11 @@ bool UARPGCombatCoordinationComponent::UpdateCoordinatedAttackers()
 			if (DistanceSquared > FMath::Square(CoordinationDeactivationRadius))
 			{
 				CoordinatedAttackers.Remove(Attacker);
-				Assignments.Remove(Attacker);
+				MeleeAssignments.Remove(Attacker);
 				NextPressureRetargetTimes.Remove(Attacker);
 				RemainingAttacksBeforeReposition.Remove(Attacker);
 				EngagementRepositionRequests.Remove(Attacker);
-				Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
+				Attacker->SetCoordination(EARPGCoordinationState::None, FVector::ZeroVector);
 				bChanged = true;
 			}
 
@@ -241,14 +241,14 @@ bool UARPGCombatCoordinationComponent::UpdateCoordinatedAttackers()
 
 void UARPGCombatCoordinationComponent::RequestFieldRefresh()
 {
-	if (!IsValid(EngagementQuery) || !IsValid(TargetActor) || ActiveQueryId != INDEX_NONE)
+	if (!IsValid(MeleeEngagementQuery) || !IsValid(TargetActor) || ActiveQueryId != INDEX_NONE)
 	{
 		return;
 	}
 
 	PendingQueryOrigin = TargetActor->GetActorLocation();
 
-	FEnvQueryRequest QueryRequest(EngagementQuery, TargetActor);
+	FEnvQueryRequest QueryRequest(MeleeEngagementQuery, TargetActor);
 	ActiveQueryId = QueryRequest.Execute(EEnvQueryRunMode::AllMatching, this, &UARPGCombatCoordinationComponent::OnFieldQueryFinished);
 }
 
@@ -299,13 +299,13 @@ void UARPGCombatCoordinationComponent::RebuildAssignments()
 
 	SortedAttackers.Sort([this, TargetLocation](const UARPGCombatantComponent& A, const UARPGCombatantComponent& B)
 	{
-		if (A.GetEngagementPriority() != B.GetEngagementPriority())
+		if (A.GetCoordinationPriority() != B.GetCoordinationPriority())
 		{
-			return A.GetEngagementPriority() > B.GetEngagementPriority();
+			return A.GetCoordinationPriority() > B.GetCoordinationPriority();
 		}
 
-		const bool bAEngaged = A.GetEngagementState() == EARPGEngagementState::Engaged;
-		const bool bBEngaged = B.GetEngagementState() == EARPGEngagementState::Engaged;
+		const bool bAEngaged = A.GetCoordinationState() == EARPGCoordinationState::MeleeEngaged;
+		const bool bBEngaged = B.GetCoordinationState() == EARPGCoordinationState::MeleeEngaged;
 
 		if (bAEngaged != bBEngaged)
 		{
@@ -355,9 +355,9 @@ void UARPGCombatCoordinationComponent::BuildEngagementAssignments(const TArray<U
 	{
 		int32 CandidateIndex = INDEX_NONE;
 
-		const FARPGCombatAssignment* ExistingAssignment = Assignments.Find(Attacker);
+		const FARPGCombatAssignment* ExistingAssignment = MeleeAssignments.Find(Attacker);
 		const bool bHasExistingEngagement = ExistingAssignment
-			&& ExistingAssignment->State == EARPGEngagementState::Engaged
+			&& ExistingAssignment->State == EARPGCoordinationState::MeleeEngaged
 			&& Candidates.IsValidIndex(ExistingAssignment->CandidateIndex);
 
 		const bool bRepositionRequested = IsEngagementRepositionRequested(Attacker);
@@ -403,7 +403,7 @@ void UARPGCombatCoordinationComponent::BuildEngagementAssignments(const TArray<U
 		}
 
 		FARPGCombatAssignment Assignment;
-		Assignment.State = EARPGEngagementState::Engaged;
+		Assignment.State = EARPGCoordinationState::MeleeEngaged;
 		Assignment.CandidateIndex = CandidateIndex;
 
 		PendingAssignments.Add(Attacker, Assignment);
@@ -429,9 +429,9 @@ void UARPGCombatCoordinationComponent::BuildPressureAssignments(const TArray<UAR
 			continue;
 		}
 
-		const FARPGCombatAssignment* ExistingAssignment = Assignments.Find(Attacker);
+		const FARPGCombatAssignment* ExistingAssignment = MeleeAssignments.Find(Attacker);
 
-		if (!ExistingAssignment || ExistingAssignment->State != EARPGEngagementState::Pressure
+		if (!ExistingAssignment || ExistingAssignment->State != EARPGCoordinationState::MeleePressure
 			|| IsPressureRetargetDue(Attacker, CurrentTime)
 			|| !Candidates.IsValidIndex(ExistingAssignment->CandidateIndex))
 		{
@@ -460,8 +460,8 @@ void UARPGCombatCoordinationComponent::BuildPressureAssignments(const TArray<UAR
 			continue;
 		}
 
-		const FARPGCombatAssignment* ExistingAssignment = Assignments.Find(Attacker);
-		const bool bWasPressure = ExistingAssignment && ExistingAssignment->State == EARPGEngagementState::Pressure;
+		const FARPGCombatAssignment* ExistingAssignment = MeleeAssignments.Find(Attacker);
+		const bool bWasPressure = ExistingAssignment && ExistingAssignment->State == EARPGCoordinationState::MeleePressure;
 		const bool bForceRetarget = bWasPressure && IsPressureRetargetDue(Attacker, CurrentTime);
 
 		const int32 CandidateIndex = FindBestPressureCandidate(Attacker, PendingAssignments, bForceRetarget);
@@ -472,7 +472,7 @@ void UARPGCombatCoordinationComponent::BuildPressureAssignments(const TArray<UAR
 		}
 
 		FARPGCombatAssignment Assignment;
-		Assignment.State = EARPGEngagementState::Pressure;
+		Assignment.State = EARPGCoordinationState::MeleePressure;
 		Assignment.CandidateIndex = CandidateIndex;
 
 		PendingAssignments.Add(Attacker, Assignment);
@@ -500,7 +500,7 @@ void UARPGCombatCoordinationComponent::CommitAssignments(
 			continue;
 		}
 
-		const FARPGCombatAssignment* PreviousAssignment = Assignments.Find(WeakAttacker);
+		const FARPGCombatAssignment* PreviousAssignment = MeleeAssignments.Find(WeakAttacker);
 		const FARPGCombatAssignment* NewAssignment = PendingAssignments.Find(WeakAttacker);
 
 		if (!NewAssignment || !Candidates.IsValidIndex(NewAssignment->CandidateIndex))
@@ -508,16 +508,16 @@ void UARPGCombatCoordinationComponent::CommitAssignments(
 			NextPressureRetargetTimes.Remove(Attacker);
 			RemainingAttacksBeforeReposition.Remove(Attacker);
 
-			Attacker->SetCoordination(EARPGEngagementState::None, FVector::ZeroVector);
+			Attacker->SetCoordination(EARPGCoordinationState::None, FVector::ZeroVector);
 			continue;
 		}
 
-		const bool bWasEngaged = PreviousAssignment && PreviousAssignment->State == EARPGEngagementState::Engaged;
-		const bool bWasPressure = PreviousAssignment && PreviousAssignment->State == EARPGEngagementState::Pressure;
+		const bool bWasEngaged = PreviousAssignment && PreviousAssignment->State == EARPGCoordinationState::MeleeEngaged;
+		const bool bWasPressure = PreviousAssignment && PreviousAssignment->State == EARPGCoordinationState::MeleePressure;
 		const bool bRepositionRequested = EngagementRepositionRequests.Contains(WeakAttacker);
 		const bool bPressureRetargetWasDue = bWasPressure && IsPressureRetargetDue(Attacker, CurrentTime);
 
-		if (NewAssignment->State == EARPGEngagementState::Engaged)
+		if (NewAssignment->State == EARPGCoordinationState::MeleeEngaged)
 		{
 			NextPressureRetargetTimes.Remove(Attacker);
 
@@ -530,7 +530,7 @@ void UARPGCombatCoordinationComponent::CommitAssignments(
 		{
 			RemainingAttacksBeforeReposition.Remove(Attacker);
 
-			if (NewAssignment->State == EARPGEngagementState::Pressure)
+			if (NewAssignment->State == EARPGCoordinationState::MeleePressure)
 			{
 				if (!bWasPressure || bPressureRetargetWasDue)
 				{
@@ -546,13 +546,13 @@ void UARPGCombatCoordinationComponent::CommitAssignments(
 		Attacker->SetCoordination(NewAssignment->State, GetCandidateWorldLocation(NewAssignment->CandidateIndex));
 	}
 
-	Assignments = MoveTemp(PendingAssignments);
+	MeleeAssignments = MoveTemp(PendingAssignments);
 	EngagementRepositionRequests.Reset();
 }
 
 void UARPGCombatCoordinationComponent::UpdateAssignmentGoals()
 {
-	if (!IsValid(TargetActor) || Assignments.IsEmpty())
+	if (!IsValid(TargetActor) || MeleeAssignments.IsEmpty())
 	{
 		return;
 	}
@@ -564,7 +564,7 @@ void UARPGCombatCoordinationComponent::UpdateAssignmentGoals()
 		return;
 	}
 
-	for (const TPair<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& Pair : Assignments)
+	for (const TPair<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& Pair : MeleeAssignments)
 	{
 		UARPGCombatantComponent* Attacker = Pair.Key.Get();
 
@@ -648,12 +648,12 @@ int32 UARPGCombatCoordinationComponent::FindBestPressureCandidate(const UARPGCom
 	const FVector AttackerLocation = Attacker->GetCombatantActor()->GetActorLocation();
 	const FVector TargetLocation = TargetActor->GetActorLocation();
 
-	const FARPGCombatAssignment* ExistingAssignment = Assignments.Find(Attacker);
+	const FARPGCombatAssignment* ExistingAssignment = MeleeAssignments.Find(Attacker);
 
 	FVector ExistingLocation = FVector::ZeroVector;
 	bool bHasExistingPressureLocation = false;
 
-	if (ExistingAssignment && ExistingAssignment->State == EARPGEngagementState::Pressure
+	if (ExistingAssignment && ExistingAssignment->State == EARPGCoordinationState::MeleePressure
 		&& Candidates.IsValidIndex(ExistingAssignment->CandidateIndex))
 	{
 		ExistingLocation = GetCandidateWorldLocation(ExistingAssignment->CandidateIndex);
@@ -779,9 +779,9 @@ void UARPGCombatCoordinationComponent::HandleAttackerAttackCompleted(UARPGCombat
 		return;
 	}
 
-	const FARPGCombatAssignment* Assignment = Assignments.Find(Attacker);
+	const FARPGCombatAssignment* Assignment = MeleeAssignments.Find(Attacker);
 
-	if (!Assignment || Assignment->State != EARPGEngagementState::Engaged)
+	if (!Assignment || Assignment->State != EARPGCoordinationState::MeleeEngaged)
 	{
 		return;
 	}

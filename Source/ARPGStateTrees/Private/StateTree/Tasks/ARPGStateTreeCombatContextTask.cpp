@@ -71,18 +71,18 @@ EStateTreeRunStatus FARPGStateTreeCombatContextTask::EnterState(FStateTreeExecut
 				return;
 			}
 
-			const EARPGEngagementState PreviousState = Data->EngagementState;
-			const FVector PreviousLocation = Data->EngagementLocation;
+			const EARPGCoordinationState PreviousState = Data->CoordinationState;
+			const FVector PreviousLocation = Data->CoordinationLocation;
 
 			UpdateCoordination(*Data);
 
-			if (PreviousState != Data->EngagementState)
+			if (PreviousState != Data->CoordinationState)
 			{
 				WeakContext.SendEvent(ARPGGameplayTags::StateTreeEvent_CombatRoleChanged, FConstStructView(), FName(TEXT("CombatRole")));
 				return;
 			}
 
-			if (!PreviousLocation.Equals(Data->EngagementLocation, 1.0f))
+			if (!PreviousLocation.Equals(Data->CoordinationLocation, 1.0f))
 			{
 				WeakContext.SendEvent(ARPGGameplayTags::StateTreeEvent_CombatGoalChanged, FConstStructView(), FName(TEXT("CombatGoal")));
 			}
@@ -143,13 +143,13 @@ void FARPGStateTreeCombatContextTask::UpdateCoordination(FInstanceDataType& Inst
 {
 	if (!IsValid(InstanceData.CombatantComponent))
 	{
-		InstanceData.EngagementState = EARPGEngagementState::None;
-		InstanceData.EngagementLocation = FVector::ZeroVector;
+		InstanceData.CoordinationState = EARPGCoordinationState::None;
+		InstanceData.CoordinationLocation = FVector::ZeroVector;
 		return;
 	}
 
-	InstanceData.EngagementState = InstanceData.CombatantComponent->GetEngagementState();
-	InstanceData.EngagementLocation = InstanceData.CombatantComponent->GetEngagementLocation();
+	InstanceData.CoordinationState = InstanceData.CombatantComponent->GetCoordinationState();
+	InstanceData.CoordinationLocation = InstanceData.CombatantComponent->GetCoordinationLocation();
 }
 
 void FARPGStateTreeCombatContextTask::UpdateAttackOpportunity(FInstanceDataType& InstanceData)

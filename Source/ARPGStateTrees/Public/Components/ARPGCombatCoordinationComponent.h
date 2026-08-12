@@ -25,7 +25,7 @@ struct FARPGCombatAssignment
 {
 	GENERATED_BODY()
 
-	EARPGEngagementState State = EARPGEngagementState::None;
+	EARPGCoordinationState State = EARPGCoordinationState::None;
 	int32 CandidateIndex = INDEX_NONE;
 };
 
@@ -86,7 +86,7 @@ protected:
 	FVector GetCandidateWorldLocation(int32 CandidateIndex) const;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|EQS")
-	TObjectPtr<UEnvQuery> EngagementQuery;
+	TObjectPtr<UEnvQuery> MeleeEngagementQuery;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination", meta = (ClampMin = "0.05"))
 	float CoordinationInterval = 0.10f;
@@ -104,7 +104,7 @@ protected:
 	float FieldRefreshDistance = 200.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination")
-	float PressureMinDistance = 225.0f;
+	float PressureMinDistance = 200.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination")
 	float AssignmentSeparation = 10.0f;
@@ -126,6 +126,21 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Pressure", meta = (ClampMin = "0.0"))
 	float PressureRadialWeight = 2.0f;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Ranged")
+	TObjectPtr<UEnvQuery> RangedCoordinationQuery;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Ranged")
+	float RangedMinDistance = 450.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Ranged")
+	float RangedMaxDistance = 700.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Ranged")
+	float RangedFieldRefreshDistance = 250.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Ranged")
+	float RangedGoalUpdateDistance = 50.0f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> TargetActor;
@@ -135,7 +150,8 @@ protected:
 	TSet<TWeakObjectPtr<UARPGCombatantComponent>> EngagementRepositionRequests;
 
 	TArray<FARPGCoordinationCandidate> Candidates;
-	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment> Assignments;
+	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment> MeleeAssignments;
+	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment> RangedAssignments;
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, double> NextPressureRetargetTimes;
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, int32> RemainingAttacksBeforeReposition;
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FDelegateHandle> AttackCompletedDelegateHandles;

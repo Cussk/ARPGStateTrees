@@ -22,10 +22,10 @@ struct FARPGStateTreeCombatContextTaskInstanceData
 	TObjectPtr<AActor> TargetActor;
 
 	UPROPERTY(VisibleAnywhere, Category = "Output")
-	EARPGEngagementState EngagementState = EARPGEngagementState::None;
+	EARPGCoordinationState CoordinationState = EARPGCoordinationState::None;
 
 	UPROPERTY(VisibleAnywhere, Category = "Output")
-	FVector EngagementLocation = FVector::ZeroVector;
+	FVector CoordinationLocation = FVector::ZeroVector;
 
 	UPROPERTY(VisibleAnywhere, Category = "Output")
 	TObjectPtr<UARPGCombatantComponent> CombatantComponent;

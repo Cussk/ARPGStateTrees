@@ -68,15 +68,15 @@ void UARPGCombatantComponent::SetCurrentTarget(UARPGCombatantComponent* NewTarge
 	OnTargetChanged.Broadcast(PreviousTarget, NewTarget);
 }
 
-void UARPGCombatantComponent::SetCoordination(const EARPGEngagementState NewState, const FVector& NewLocation)
+void UARPGCombatantComponent::SetCoordination(const EARPGCoordinationState NewState, const FVector& NewLocation)
 {
-	if (EngagementState == NewState && EngagementLocation.Equals(NewLocation, 1.0f))
+	if (CoordinationState == NewState && CoordinationLocation.Equals(NewLocation, 1.0f))
 	{
 		return;
 	}
 
-	EngagementState = NewState;
-	EngagementLocation = NewLocation;
+	CoordinationState = NewState;
+	CoordinationLocation = NewLocation;
 
 	OnCoordinationChanged.Broadcast();
 }
@@ -122,14 +122,14 @@ bool UARPGCombatantComponent::IsHostileTo(const UARPGCombatantComponent* Other) 
 	return Team != Other->Team;
 }
 
-EARPGEngagementState UARPGCombatantComponent::GetEngagementState() const
+EARPGCoordinationState UARPGCombatantComponent::GetCoordinationState() const
 {
-	return EngagementState;
+	return CoordinationState;
 }
 
-const FVector& UARPGCombatantComponent::GetEngagementLocation() const
+const FVector& UARPGCombatantComponent::GetCoordinationLocation() const
 {
-	return EngagementLocation;
+	return CoordinationLocation;
 }
 
 float UARPGCombatantComponent::GetOccupancyRadius() const
@@ -142,9 +142,9 @@ float UARPGCombatantComponent::GetMaxEngagementDistance() const
 	return MaxEngagementDistance;
 }
 
-int32 UARPGCombatantComponent::GetEngagementPriority() const
+int32 UARPGCombatantComponent::GetCoordinationPriority() const
 {
-	return EngagementPriority;
+	return CoordinationPriority;
 }
 
 AActor* UARPGCombatantComponent::GetCombatantActor() const
@@ -155,6 +155,11 @@ AActor* UARPGCombatantComponent::GetCombatantActor() const
 UARPGCombatantComponent* UARPGCombatantComponent::GetCurrentTarget() const
 {
 	return CurrentTarget.Get();
+}
+
+EARPGPositioningMode UARPGCombatantComponent::GetPositioningMode() const
+{
+	return PositioningMode;
 }
 
 void UARPGCombatantComponent::NotifyAttackCompleted()

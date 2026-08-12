@@ -31,25 +31,26 @@ public:
 	void SetTeam(EARPGCombatTeam NewTeam);
 	void SetTargetable(bool bNewTargetable);
 	void SetCurrentTarget(UARPGCombatantComponent* NewTarget);
-	void SetCoordination(EARPGEngagementState NewState, const FVector& NewLocation);
+	void SetCoordination(EARPGCoordinationState NewState, const FVector& NewLocation);
 	void SetTargetInAttackRange(bool bInRange);
 
 	EARPGCombatTeam GetTeam() const;
 	bool IsTargetable() const;
 	bool IsHostileTo(const UARPGCombatantComponent* Other) const;
 
-	EARPGEngagementState GetEngagementState() const;
-	const FVector& GetEngagementLocation() const;
+	EARPGCoordinationState GetCoordinationState() const;
+	const FVector& GetCoordinationLocation() const;
 
 	float GetOccupancyRadius() const;
 	float GetMaxEngagementDistance() const;
-	int32 GetEngagementPriority() const;
+	int32 GetCoordinationPriority() const;
 
 	float GetBasicAttackRange() const;
 	bool IsTargetInAttackRange() const;
 
 	AActor* GetCombatantActor() const;
 	UARPGCombatantComponent* GetCurrentTarget() const;
+	EARPGPositioningMode GetPositioningMode() const;
 
 	void NotifyAttackCompleted();
 
@@ -64,6 +65,9 @@ public:
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
 	EARPGCombatTeam Team = EARPGCombatTeam::Neutral;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Coordination")
+    EARPGPositioningMode PositioningMode = EARPGPositioningMode::Melee;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
 	bool bTargetable = true;
@@ -75,7 +79,7 @@ protected:
 	float MaxEngagementDistance = 180.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Engagement")
-	int32 EngagementPriority = 0;
+	int32 CoordinationPriority = 0;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Engagement", meta = (ClampMin = "1"))
 	int32 MinAttacksBeforeReposition = 2;
@@ -90,10 +94,10 @@ protected:
 	TObjectPtr<AActor> CombatantActor;
 
 	UPROPERTY(Transient)
-	EARPGEngagementState EngagementState = EARPGEngagementState::None;
+	EARPGCoordinationState CoordinationState = EARPGCoordinationState::None;
 
 	UPROPERTY(Transient)
-	FVector EngagementLocation = FVector::ZeroVector;
+	FVector CoordinationLocation = FVector::ZeroVector;
 	
 	UPROPERTY(Transient)
 	bool bTargetInAttackRange = false;
