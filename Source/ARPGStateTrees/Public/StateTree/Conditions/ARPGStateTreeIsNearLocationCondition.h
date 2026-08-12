@@ -24,7 +24,7 @@ struct FARPGStateTreeIsNearLocationConditionInstanceData
 /**
  * Tests whether an actor is within a 2D acceptance radius of a location.
  */
-USTRUCT(DisplayName = "ARPG Is Near Location")
+USTRUCT(DisplayName = "ARPG Is Near Location", Category = "ARPG")
 struct ARPGSTATETREES_API FARPGStateTreeIsNearLocationCondition : public FStateTreeConditionCommonBase
 {
 	GENERATED_BODY()
