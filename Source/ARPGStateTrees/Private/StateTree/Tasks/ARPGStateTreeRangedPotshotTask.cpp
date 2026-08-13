@@ -39,11 +39,72 @@ namespace ARPGStateTreeRangedPotshot
 			<= FMath::Square(OpportunityRange);
 	}
 
-	void ScheduleOpportunity(FARPGStateTreeRangedPotshotTaskInstanceData& InstanceData,
+	bool IsNewMovement(const FARPGStateTreeRangedPotshotTaskInstanceData& InstanceData)
+	{
+		if (!InstanceData.bHasEvaluatedMovement)
+		{
+			return true;
+		}
+
+		if (InstanceData.MovementMode == EARPGPotshotMovementMode::Approach)
+		{
+			if (!IsValid(InstanceData.CombatantComponent))
+			{
+				return false;
+			}
+
+			const UARPGCombatantComponent* CurrentTarget = InstanceData.CombatantComponent->GetCurrentTarget();
+
+			return InstanceData.LastEvaluatedTarget.Get() != CurrentTarget->GetCombatantActor();
+		}
+
+		return FVector::DistSquared2D(InstanceData.LastEvaluatedMovementGoal, InstanceData.MovementGoal)
+			> FMath::Square(InstanceData.MovementGoalTolerance);
+	}
+	
+	void RecordMovement(FARPGStateTreeRangedPotshotTaskInstanceData& InstanceData)
+	{
+		InstanceData.bHasEvaluatedMovement = true;
+		InstanceData.bPotshotSent = false;
+
+		if (InstanceData.MovementMode == EARPGPotshotMovementMode::Approach)
+		{
+			const UARPGCombatantComponent* CurrentTarget = InstanceData.CombatantComponent->GetCurrentTarget();
+			InstanceData.LastEvaluatedTarget = CurrentTarget->GetCombatantActor();
+			return;
+		}
+
+		InstanceData.LastEvaluatedMovementGoal = InstanceData.MovementGoal;
+	}
+
+	void SendPotshot(FARPGStateTreeRangedPotshotTaskInstanceData& InstanceData, FStateTreeWeakExecutionContext WeakContext)
+	{
+		if (InstanceData.bPotshotSent)
+		{
+			return;
+		}
+
+		InstanceData.bPotshotSent = true;
+
+		if (IsValid(InstanceData.CombatantComponent))
+		{
+			if (UWorld* World = InstanceData.CombatantComponent->GetWorld())
+			{
+				World->GetTimerManager().ClearTimer(InstanceData.RangeCheckTimer);
+			}
+		}
+
+		WeakContext.SendEvent(
+			ARPGGameplayTags::StateTreeEvent_RangedPotshot,
+			FConstStructView(),
+			FName(TEXT("RangedPotshot")));
+	}
+
+	void StartRangeCheck(FARPGStateTreeRangedPotshotTaskInstanceData& InstanceData,
 		FStateTreeWeakExecutionContext WeakContext,
 		TStateTreeInstanceDataStructRef<FARPGStateTreeRangedPotshotTaskInstanceData> InstanceDataRef)
 	{
-		if (!InstanceData.bActive || InstanceData.bOpportunitySent || !IsValid(InstanceData.CombatantComponent))
+		if (!InstanceData.bActive || InstanceData.bPotshotSent || !IsValid(InstanceData.CombatantComponent))
 		{
 			return;
 		}
@@ -55,35 +116,29 @@ namespace ARPGStateTreeRangedPotshot
 			return;
 		}
 
-		const float MaxDelay = FMath::Max(InstanceData.MinDelay, InstanceData.MaxDelay);
-		const float Delay = FMath::FRandRange(InstanceData.MinDelay, MaxDelay);
-
 		FTimerDelegate TimerDelegate;
 		TimerDelegate.BindLambda([WeakContext, InstanceDataRef]() mutable
 		{
 			FARPGStateTreeRangedPotshotTaskInstanceData* Data = InstanceDataRef.GetPtr();
 
-			if (!Data || !Data->bActive || Data->bOpportunitySent || !IsValid(Data->CombatantComponent))
+			if (!Data || !Data->bActive || Data->bPotshotSent || !IsValid(Data->CombatantComponent))
 			{
 				return;
 			}
 
-			if (IsTargetWithinOpportunityRange(*Data))
+			if (!IsTargetWithinOpportunityRange(*Data))
 			{
-				Data->bOpportunitySent = true;
-
-				WeakContext.SendEvent(
-					ARPGGameplayTags::StateTreeEvent_RangedPotshot,
-					FConstStructView(),
-					FName(TEXT("RangedPotshot")));
-
 				return;
 			}
 
-			ScheduleOpportunity(*Data, WeakContext, InstanceDataRef);
+			SendPotshot(*Data, WeakContext);
 		});
 
-		World->GetTimerManager().SetTimer(InstanceData.OpportunityTimer, TimerDelegate, Delay, false);
+		World->GetTimerManager().SetTimer(
+			InstanceData.RangeCheckTimer,
+			TimerDelegate,
+			InstanceData.RangeCheckInterval,
+			true);
 	}
 }
 
@@ -106,12 +161,34 @@ EStateTreeRunStatus FARPGStateTreeRangedPotshotTask::EnterState(FStateTreeExecut
 	}
 
 	InstanceData.bActive = true;
-	InstanceData.bOpportunitySent = false;
 
-	ARPGStateTreeRangedPotshot::ScheduleOpportunity(
-		InstanceData,
-		Context.MakeWeakExecutionContext(),
-		Context.GetInstanceDataStructRef(*this));
+	if (!ARPGStateTreeRangedPotshot::IsNewMovement(InstanceData))
+	{
+		return EStateTreeRunStatus::Running;
+	}
+
+	ARPGStateTreeRangedPotshot::RecordMovement(InstanceData);
+
+	if (FMath::FRand() > InstanceData.OpportunityChance)
+	{
+		return EStateTreeRunStatus::Running;
+	}
+
+	const FStateTreeWeakExecutionContext WeakContext = Context.MakeWeakExecutionContext();
+
+	if (ARPGStateTreeRangedPotshot::IsTargetWithinOpportunityRange(InstanceData))
+	{
+		ARPGStateTreeRangedPotshot::SendPotshot(InstanceData, WeakContext);
+		return EStateTreeRunStatus::Running;
+	}
+
+	if (InstanceData.bWaitForRange)
+	{
+		ARPGStateTreeRangedPotshot::StartRangeCheck(
+			InstanceData,
+			WeakContext,
+			Context.GetInstanceDataStructRef(*this));
+	}
 
 	return EStateTreeRunStatus::Running;
 }
@@ -122,15 +199,14 @@ void FARPGStateTreeRangedPotshotTask::ExitState(FStateTreeExecutionContext& Cont
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
 
 	InstanceData.bActive = false;
-	InstanceData.bOpportunitySent = false;
 
 	if (IsValid(InstanceData.CombatantComponent))
 	{
 		if (UWorld* World = InstanceData.CombatantComponent->GetWorld())
 		{
-			World->GetTimerManager().ClearTimer(InstanceData.OpportunityTimer);
+			World->GetTimerManager().ClearTimer(InstanceData.RangeCheckTimer);
 		}
 	}
 
-	InstanceData.OpportunityTimer.Invalidate();
+	InstanceData.RangeCheckTimer.Invalidate();
 }
