@@ -78,12 +78,18 @@ EStateTreeRunStatus FARPGStateTreeCombatContextTask::EnterState(FStateTreeExecut
 
 			if (PreviousState != Data->CoordinationState)
 			{
+				UE_LOG(LogTemp, Warning, TEXT("%s ST EVENT: CombatRoleChanged"),
+		*GetNameSafe(Data->CombatantComponent->GetCombatantActor()));
+				
 				WeakContext.SendEvent(ARPGGameplayTags::StateTreeEvent_CombatRoleChanged, FConstStructView(), FName(TEXT("CombatRole")));
 				return;
 			}
 
 			if (!PreviousLocation.Equals(Data->CoordinationLocation, 1.0f))
 			{
+				UE_LOG(LogTemp, Warning, TEXT("%s ST EVENT: CombatGoalChanged"),
+		*GetNameSafe(Data->CombatantComponent->GetCombatantActor()));
+				
 				WeakContext.SendEvent(ARPGGameplayTags::StateTreeEvent_CombatGoalChanged, FConstStructView(), FName(TEXT("CombatGoal")));
 			}
 		});
@@ -102,6 +108,9 @@ EStateTreeRunStatus FARPGStateTreeCombatContextTask::EnterState(FStateTreeExecut
 
 		if (bInRange)
 		{
+			UE_LOG(LogTemp, Warning, TEXT("%s ST EVENT: AttackOpportunity"),
+		*GetNameSafe(Data->CombatantComponent->GetCombatantActor()));
+			
 			WeakContext.SendEvent(ARPGGameplayTags::StateTreeEvent_AttackOpportunity, FConstStructView(),FName(TEXT("AttackOpportunity")));
 		}
 	});
