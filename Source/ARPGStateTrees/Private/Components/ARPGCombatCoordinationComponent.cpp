@@ -76,6 +76,9 @@ void UARPGCombatCoordinationComponent::UnregisterAttacker(UARPGCombatantComponen
 	NextPressureRetargetTimes.Remove(Attacker);
 	RemainingAttacksBeforeReposition.Remove(Attacker);
 	EngagementRepositionRequests.Remove(Attacker);
+	RangedRepositionRequests.Remove(Attacker);
+	RangedRepositionRequestTimes.Remove(Attacker);
+	RemainingRangedAttacksBeforeReposition.Remove(Attacker);
 
 	Attacker->SetTargetInAttackRange(false);
 	Attacker->SetCoordination(EARPGCoordinationState::None, FVector::ZeroVector);
@@ -131,6 +134,9 @@ void UARPGCombatCoordinationComponent::StopCoordination()
 	NextPressureRetargetTimes.Reset();
 	RemainingAttacksBeforeReposition.Reset();
 	EngagementRepositionRequests.Reset();
+	RangedRepositionRequests.Reset();
+	RangedRepositionRequestTimes.Reset();
+	RemainingRangedAttacksBeforeReposition.Reset();
 
 	LastAssignmentReevaluationTime = 0.0;
 
@@ -263,9 +269,40 @@ bool UARPGCombatCoordinationComponent::UpdateCoordinatedAttackers()
 			continue;
 		}
 
-		const float DistanceSquared = FVector::DistSquared2D(TargetLocation, Attacker->GetCombatantActor()->GetActorLocation());
+		const float DistanceSquared = FVector::DistSquared2D(
+	TargetLocation, Attacker->GetCombatantActor()->GetActorLocation());
 
-		Attacker->SetTargetInAttackRange(DistanceSquared <= FMath::Square(Attacker->GetBasicAttackRange()));
+		const float AttackRange = Attacker->GetBasicAttackRange();
+		const bool bInAttackRange = DistanceSquared <= FMath::Square(AttackRange);
+
+		if (bInAttackRange != Attacker->IsTargetInAttackRange())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("%s Attack Range Changed: Distance=%.1f Range=%.1f InRange=%s"),
+				*GetNameSafe(Attacker->GetCombatantActor()),
+				FMath::Sqrt(DistanceSquared),
+				AttackRange,
+				bInAttackRange ? TEXT("TRUE") : TEXT("FALSE"));
+		}
+		
+		const FARPGCombatAssignment* RangedAssignment = RangedAssignments.Find(Attacker);
+
+		if (RangedAssignment)
+		{
+			const float AssignmentDistance = FVector::Dist2D(TargetLocation, RangedAssignment->Location);
+			const float DistanceToAssignment = FVector::Dist2D(
+				Attacker->GetCombatantActor()->GetActorLocation(), RangedAssignment->Location);
+
+			UE_LOG(LogTemp, Warning,
+				TEXT("%s Actual=%.1f AssignmentFromTarget=%.1f DistanceToAssignment=%.1f Range=%.1f InRange=%s"),
+				*GetNameSafe(Attacker->GetCombatantActor()),
+				FMath::Sqrt(DistanceSquared),
+				AssignmentDistance,
+				DistanceToAssignment,
+				AttackRange,
+				bInAttackRange ? TEXT("TRUE") : TEXT("FALSE"));
+		}
+
+		Attacker->SetTargetInAttackRange(bInAttackRange);
 
 		const bool bRanged = Attacker->GetPositioningMode() == EARPGPositioningMode::Ranged;
 		const float ActivationRadius = bRanged ? RangedCoordinationActivationRadius : CoordinationActivationRadius;
@@ -872,7 +909,7 @@ bool UARPGCombatCoordinationComponent::UpdateRangedRepositionRequests(const doub
 	{
 		UARPGCombatantComponent* Attacker = Pair.Key.Get();
 
-		if (!IsValid(Attacker))
+		if (!IsValid(Attacker) || !IsValid(Attacker->GetCombatantActor()))
 		{
 			continue;
 		}
@@ -882,7 +919,16 @@ bool UARPGCombatCoordinationComponent::UpdateRangedRepositionRequests(const doub
 			continue;
 		}
 
-		const float TargetDistance = FVector::Dist2D(TargetLocation, Pair.Value.Location);
+		const FVector AttackerLocation = Attacker->GetCombatantActor()->GetActorLocation();
+		const float DistanceToAssignment = FVector::Dist2D(AttackerLocation, Pair.Value.Location);
+
+		if (DistanceToAssignment > RangedAssignmentSettledDistance)
+		{
+			RangedRepositionRequestTimes.Remove(Attacker);
+			continue;
+		}
+
+		const float TargetDistance = FVector::Dist2D(TargetLocation, AttackerLocation);
 		const bool bPositionValid = TargetDistance >= RangedHoldMinDistance && TargetDistance <= RangedHoldMaxDistance;
 
 		if (bPositionValid)
