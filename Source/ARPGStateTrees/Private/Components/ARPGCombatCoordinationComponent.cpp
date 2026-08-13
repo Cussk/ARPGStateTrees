@@ -270,37 +270,10 @@ bool UARPGCombatCoordinationComponent::UpdateCoordinatedAttackers()
 		}
 
 		const float DistanceSquared = FVector::DistSquared2D(
-	TargetLocation, Attacker->GetCombatantActor()->GetActorLocation());
+		TargetLocation, Attacker->GetCombatantActor()->GetActorLocation());
 
 		const float AttackRange = Attacker->GetBasicAttackRange();
 		const bool bInAttackRange = DistanceSquared <= FMath::Square(AttackRange);
-
-		if (bInAttackRange != Attacker->IsTargetInAttackRange())
-		{
-			UE_LOG(LogTemp, Warning, TEXT("%s Attack Range Changed: Distance=%.1f Range=%.1f InRange=%s"),
-				*GetNameSafe(Attacker->GetCombatantActor()),
-				FMath::Sqrt(DistanceSquared),
-				AttackRange,
-				bInAttackRange ? TEXT("TRUE") : TEXT("FALSE"));
-		}
-		
-		const FARPGCombatAssignment* RangedAssignment = RangedAssignments.Find(Attacker);
-
-		if (RangedAssignment)
-		{
-			const float AssignmentDistance = FVector::Dist2D(TargetLocation, RangedAssignment->Location);
-			const float DistanceToAssignment = FVector::Dist2D(
-				Attacker->GetCombatantActor()->GetActorLocation(), RangedAssignment->Location);
-
-			UE_LOG(LogTemp, Warning,
-				TEXT("%s Actual=%.1f AssignmentFromTarget=%.1f DistanceToAssignment=%.1f Range=%.1f InRange=%s"),
-				*GetNameSafe(Attacker->GetCombatantActor()),
-				FMath::Sqrt(DistanceSquared),
-				AssignmentDistance,
-				DistanceToAssignment,
-				AttackRange,
-				bInAttackRange ? TEXT("TRUE") : TEXT("FALSE"));
-		}
 
 		Attacker->SetTargetInAttackRange(bInAttackRange);
 
@@ -1139,10 +1112,20 @@ int32 UARPGCombatCoordinationComponent::FindBestRangedCandidate(const UARPGComba
 			continue;
 		}
 
-		if (bForceReposition && !ExistingLocation.IsNearlyZero()
-			&& FVector::DistSquared2D(ExistingLocation, CandidateLocation) < FMath::Square(RangedRepositionMinMoveDistance))
+		if (bForceReposition)
 		{
-			continue;
+			if (FVector::DistSquared2D(AttackerLocation, CandidateLocation)
+				< FMath::Square(RangedRepositionMinMoveDistance))
+			{
+				continue;
+			}
+
+			if (!ExistingLocation.IsNearlyZero()
+				&& FVector::DistSquared2D(ExistingLocation, CandidateLocation)
+					< FMath::Square(RangedRepositionMinMoveDistance))
+			{
+				continue;
+			}
 		}
 
 		if (!CanOccupyRangedLocation(Attacker, CandidateLocation, PendingAssignments))

@@ -173,10 +173,10 @@ protected:
 	float RangedHoldMinDistance = 375.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Ranged")
-	float RangedHoldMaxDistance = 725.0f;
+	float RangedHoldMaxDistance = 775.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Ranged")
-	float RangedRepositionMinMoveDistance = 125.0f;
+	float RangedRepositionMinMoveDistance = 250.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Ranged")
 	float RangedReactionMinDelay = 0.25f;
