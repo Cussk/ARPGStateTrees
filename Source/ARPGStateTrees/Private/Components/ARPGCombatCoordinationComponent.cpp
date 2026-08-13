@@ -1279,6 +1279,20 @@ void UARPGCombatCoordinationComponent::HandleAttackerAttackCompleted(UARPGCombat
 	{
 		return;
 	}
+	
+	if (!IsValid(Attacker->GetCombatantActor()))
+	{
+		return;
+	}
+
+	const float DistanceToAssignmentSquared = FVector::DistSquared2D(
+		Attacker->GetCombatantActor()->GetActorLocation(),
+		RangedAssignment->Location);
+
+	if (DistanceToAssignmentSquared > FMath::Square(RangedAssignmentSettledDistance))
+	{
+		return;
+	}
 
 	int32* RemainingAttacks = RemainingRangedAttacksBeforeReposition.Find(Attacker);
 
