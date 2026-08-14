@@ -19,12 +19,14 @@ enum class EARPGCoordinationState : uint8
 	None,
 	MeleePressure,
 	MeleeEngaged,
-	Ranged
+	Ranged,
+	Support
 };
 
 UENUM(BlueprintType)
 enum class EARPGPositioningMode : uint8
 {
 	Melee,
-	Ranged
+	Ranged,
+	Support
 };

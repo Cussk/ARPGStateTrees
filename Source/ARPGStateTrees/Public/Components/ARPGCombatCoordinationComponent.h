@@ -59,6 +59,9 @@ protected:
 
 	void RequestRangedFieldRefresh();
 	void OnRangedFieldQueryFinished(TSharedPtr<FEnvQueryResult> Result);
+	
+	void RequestSupportFieldRefresh();
+	void OnSupportFieldQueryFinished(TSharedPtr<FEnvQueryResult> Result);
 
 	void RebuildAssignments();
 
@@ -68,10 +71,14 @@ protected:
 		TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const;
 	void BuildRangedAssignments(const TArray<UARPGCombatantComponent*>& SortedAttackers,
 		TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const;
+	void BuildSupportAssignments(const TArray<UARPGCombatantComponent*>& SupportAttackers,
+		TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const;
 
 	void CommitMeleeAssignments(const TArray<UARPGCombatantComponent*>& MeleeAttackers,
 		TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments);
 	void CommitRangedAssignments(const TArray<UARPGCombatantComponent*>& RangedAttackers,
+		TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments);
+	void CommitSupportAssignments(const TArray<UARPGCombatantComponent*>& SupportAttackers,
 		TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments);
 
 	void UpdateMeleeAssignmentGoals();
@@ -79,6 +86,8 @@ protected:
 	bool UpdateRangedRepositionRequests(double CurrentTime);
 	bool IsRangedRepositionRequested(const UARPGCombatantComponent* Attacker) const;
 	void ResetRangedAttackCount(UARPGCombatantComponent* Attacker);
+	
+	bool UpdateSupportRepositionRequests(double CurrentTime);
 
 	int32 FindBestEngagementCandidate(const UARPGCombatantComponent* Attacker,
 		const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments,
@@ -89,10 +98,14 @@ protected:
 	int32 FindBestRangedCandidate(const UARPGCombatantComponent* Attacker,
 		const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments,
 		bool bForceReposition = false, const FVector& ExistingLocation = FVector::ZeroVector) const;
+	int32 FindBestSupportCandidate(const UARPGCombatantComponent* Attacker,
+		const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const;
 
 	bool CanOccupyMeleeCandidate(const UARPGCombatantComponent* Attacker, int32 CandidateIndex,
 		const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const;
 	bool CanOccupyRangedLocation(const UARPGCombatantComponent* Attacker, const FVector& Location,
+		const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const;
+	bool CanOccupySupportLocation(const UARPGCombatantComponent* Attacker, const FVector& Location,
 		const TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& PendingAssignments) const;
 
 	bool IsPressureRetargetDue(const UARPGCombatantComponent* Attacker, double CurrentTime) const;
@@ -108,6 +121,7 @@ protected:
 
 	FVector GetMeleeCandidateWorldLocation(int32 CandidateIndex) const;
 	FVector GetRangedCandidateWorldLocation(int32 CandidateIndex) const;
+	FVector GetSupportCandidateWorldLocation(int32 CandidateIndex) const;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|EQS")
 	TObjectPtr<UEnvQuery> MeleeEngagementQuery;
@@ -186,6 +200,39 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Ranged")
 	float RangedAssignmentSettledDistance = 100.0f;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support")
+	TObjectPtr<UEnvQuery> SupportCoordinationQuery;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support")
+	float SupportCoordinationActivationRadius = 1200.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support")
+	float SupportCoordinationDeactivationRadius = 1400.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support")
+	float SupportMinDistance = 750.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support")
+	float SupportMaxDistance = 950.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support")
+	float SupportHoldMinDistance = 650.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support")
+	float SupportHoldMaxDistance = 1050.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support")
+	float SupportFieldRefreshDistance = 300.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support")
+	float SupportReactionMinDelay = 0.40f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support")
+	float SupportReactionMaxDelay = 0.80f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support")
+	float SupportAssignmentSettledDistance = 100.0f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> TargetActor;
@@ -194,9 +241,11 @@ protected:
 	TSet<TWeakObjectPtr<UARPGCombatantComponent>> CoordinatedAttackers;
 	TSet<TWeakObjectPtr<UARPGCombatantComponent>> EngagementRepositionRequests;
 	TSet<TWeakObjectPtr<UARPGCombatantComponent>> RangedRepositionRequests;
+	TSet<TWeakObjectPtr<UARPGCombatantComponent>> SupportRepositionRequests;
 
 	TArray<FARPGCoordinationCandidate> MeleeCandidates;
 	TArray<FARPGCoordinationCandidate> RangedCandidates;
+	TArray<FARPGCoordinationCandidate> SupportCandidates;
 
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment> MeleeAssignments;
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment> RangedAssignments;
@@ -205,6 +254,8 @@ protected:
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, double> RangedRepositionRequestTimes;
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, int32> RemainingRangedAttacksBeforeReposition;
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FDelegateHandle> AttackCompletedDelegateHandles;
+	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment> SupportAssignments;
+	TMap<TWeakObjectPtr<UARPGCombatantComponent>, double> SupportRepositionRequestTimes;
 
 	FVector MeleeFieldOrigin = FVector::ZeroVector;
 	FVector MeleePendingQueryOrigin = FVector::ZeroVector;
@@ -213,11 +264,15 @@ protected:
 	FVector RangedFieldOrigin = FVector::ZeroVector;
 	FVector RangedPendingQueryOrigin = FVector::ZeroVector;
 	FVector LastRangedGoalUpdateOrigin = FVector::ZeroVector;
+	
+	FVector SupportFieldOrigin = FVector::ZeroVector;
+	FVector SupportPendingQueryOrigin = FVector::ZeroVector;
 
 	FTimerHandle CoordinationTimer;
 
 	int32 ActiveMeleeQueryId = INDEX_NONE;
 	int32 ActiveRangedQueryId = INDEX_NONE;
+	int32 ActiveSupportQueryId = INDEX_NONE;
 
 	double LastAssignmentReevaluationTime = 0.0;
 
@@ -225,4 +280,6 @@ protected:
 	bool bRangedFieldInitialized = false;
 	bool bMeleeAssignmentsDirty = false;
 	bool bRangedAssignmentsDirty = false;
+	bool bSupportFieldInitialized = false;
+	bool bSupportAssignmentsDirty = false;
 };
