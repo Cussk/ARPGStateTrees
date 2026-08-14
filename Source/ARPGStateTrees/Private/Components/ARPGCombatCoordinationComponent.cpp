@@ -84,7 +84,8 @@ void UARPGCombatCoordinationComponent::UnregisterAttacker(UARPGCombatantComponen
 	RemainingRangedAttacksBeforeReposition.Remove(Attacker);
 	SupportAssignments.Remove(Attacker);
 	SupportRepositionRequests.Remove(Attacker);
-	SupportRepositionRequestTimes.Remove(Attacker);NextSupportAbilityTimes.Remove(Attacker);
+	SupportRepositionRequestTimes.Remove(Attacker);
+	NextSupportAbilityTimes.Remove(Attacker);
 
 	Attacker->SetTargetInAttackRange(false);
 	Attacker->SetCoordination(EARPGCoordinationState::None, FVector::ZeroVector);
@@ -293,6 +294,11 @@ void UARPGCombatCoordinationComponent::UpdateCoordination()
 	if (bMeleeAssignmentsDirty || bRangedAssignmentsDirty || bSupportAssignmentsDirty)
 	{
 		RebuildAssignments();
+	}
+	
+	if (bHasSupportAttackers)
+	{
+		UpdateSupportOpportunities(CurrentTime);
 	}
 }
 
