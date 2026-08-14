@@ -12,6 +12,8 @@ class UARPGCombatantComponent;
 DECLARE_MULTICAST_DELEGATE(FARPGCoordinationChanged);
 DECLARE_MULTICAST_DELEGATE_OneParam(FARPGCombatantAttackCompleted, UARPGCombatantComponent*);
 DECLARE_MULTICAST_DELEGATE_OneParam(FARPGAttackOpportunityChanged, bool);
+DECLARE_MULTICAST_DELEGATE_OneParam(FARPGCombatantSupportOpportunityChanged, bool);
+DECLARE_MULTICAST_DELEGATE_OneParam(FARPGCombatantSupportAbilityUsed, UARPGCombatantComponent*);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FARPGCombatantTargetChanged, UARPGCombatantComponent*, UARPGCombatantComponent*);
 
 /**
@@ -51,8 +53,12 @@ public:
 	AActor* GetCombatantActor() const;
 	UARPGCombatantComponent* GetCurrentTarget() const;
 	EARPGPositioningMode GetPositioningMode() const;
+	
+	void SetSupportOpportunity(bool bAvailable);
+	bool HasSupportOpportunity() const;
 
 	void NotifyAttackCompleted();
+	void NotifySupportAbilityUsed();
 
 	int32 GetMinAttacksBeforeReposition() const;
 	int32 GetMaxAttacksBeforeReposition() const;
@@ -60,6 +66,8 @@ public:
 	FARPGCombatantTargetChanged OnTargetChanged;
 	FARPGCombatantAttackCompleted OnAttackCompleted;
 	FARPGAttackOpportunityChanged OnAttackOpportunityChanged;
+	FARPGCombatantSupportOpportunityChanged OnSupportOpportunityChanged;
+	FARPGCombatantSupportAbilityUsed OnSupportAbilityUsed;
 	FARPGCoordinationChanged OnCoordinationChanged;
 
 protected:
@@ -101,6 +109,9 @@ protected:
 	
 	UPROPERTY(Transient)
 	bool bTargetInAttackRange = false;
+	
+	UPROPERTY(Transient)
+	bool bSupportOpportunity = false;
 
 	TWeakObjectPtr<UARPGCombatantComponent> CurrentTarget;
 };

@@ -32,10 +32,14 @@ struct FARPGStateTreeCombatContextTaskInstanceData
 	
 	UPROPERTY(VisibleAnywhere, Category = "Output")
 	bool bTargetInAttackRange = false;
+	
+	UPROPERTY(VisibleAnywhere, Category = "Output")
+	bool bSupportOpportunity = false;
 
 	FDelegateHandle TargetChangedHandle;
 	FDelegateHandle CoordinationChangedHandle;
 	FDelegateHandle AttackOpportunityChangedHandle;
+	FDelegateHandle SupportOpportunityChangedHandle;
 };
 
 /**
@@ -58,4 +62,5 @@ private:
 	static void UpdateTarget(FInstanceDataType& InstanceData);
 	static void UpdateCoordination(FInstanceDataType& InstanceData);
 	static void UpdateAttackOpportunity(FInstanceDataType& InstanceData);
+	static void UpdateSupportOpportunity(FInstanceDataType& InstanceData);
 };

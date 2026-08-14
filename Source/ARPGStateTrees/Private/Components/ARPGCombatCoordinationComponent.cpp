@@ -33,6 +33,7 @@ void UARPGCombatCoordinationComponent::EndPlay(const EEndPlayReason::Type EndPla
 	}
 
 	AttackCompletedDelegateHandles.Reset();
+	SupportAbilityUsedDelegateHandles.Reset();
 
 	Attackers.Reset();
 	CoordinatedAttackers.Reset();
@@ -83,10 +84,11 @@ void UARPGCombatCoordinationComponent::UnregisterAttacker(UARPGCombatantComponen
 	RemainingRangedAttacksBeforeReposition.Remove(Attacker);
 	SupportAssignments.Remove(Attacker);
 	SupportRepositionRequests.Remove(Attacker);
-	SupportRepositionRequestTimes.Remove(Attacker);
+	SupportRepositionRequestTimes.Remove(Attacker);NextSupportAbilityTimes.Remove(Attacker);
 
 	Attacker->SetTargetInAttackRange(false);
 	Attacker->SetCoordination(EARPGCoordinationState::None, FVector::ZeroVector);
+	Attacker->SetSupportOpportunity(false);
 
 	bMeleeAssignmentsDirty = true;
 	bRangedAssignmentsDirty = true;
@@ -133,6 +135,16 @@ void UARPGCombatCoordinationComponent::StopCoordination()
 			QueryManager->AbortQuery(ActiveSupportQueryId);
 		}
 	}
+	
+	for (const TWeakObjectPtr<UARPGCombatantComponent>& WeakAttacker : Attackers)
+	{
+		if (UARPGCombatantComponent* Attacker = WeakAttacker.Get())
+		{
+			Attacker->SetSupportOpportunity(false);
+		}
+	}
+	
+	NextSupportAbilityTimes.Reset();
 
 	ActiveMeleeQueryId = INDEX_NONE;
 	ActiveRangedQueryId = INDEX_NONE;
@@ -355,6 +367,7 @@ bool UARPGCombatCoordinationComponent::UpdateCoordinatedAttackers()
 				SupportRepositionRequestTimes.Remove(Attacker);
 
 				Attacker->SetCoordination(EARPGCoordinationState::None, FVector::ZeroVector);
+				Attacker->SetSupportOpportunity(false);
 				bChanged = true;
 			}
 
@@ -1056,6 +1069,9 @@ void UARPGCombatCoordinationComponent::CommitSupportAssignments(const TArray<UAR
 		if (!NewAssignment)
 		{
 			SupportRepositionRequestTimes.Remove(Attacker);
+			NextSupportAbilityTimes.Remove(Attacker);
+
+			Attacker->SetSupportOpportunity(false);
 			Attacker->SetCoordination(EARPGCoordinationState::None, FVector::ZeroVector);
 			continue;
 		}
@@ -1705,17 +1721,132 @@ bool UARPGCombatCoordinationComponent::IsEngagementRepositionRequested(const UAR
 	return EngagementRepositionRequests.Contains(Attacker);
 }
 
-void UARPGCombatCoordinationComponent::BindAttackerEvents(UARPGCombatantComponent* Attacker)
+void UARPGCombatCoordinationComponent::UpdateSupportOpportunities(const double CurrentTime)
 {
-	if (!IsValid(Attacker) || AttackCompletedDelegateHandles.Contains(Attacker))
+	if (SupportAssignments.IsEmpty())
 	{
 		return;
 	}
 
-	const FDelegateHandle Handle = Attacker->OnAttackCompleted.AddUObject(
-		this, &UARPGCombatCoordinationComponent::HandleAttackerAttackCompleted);
+	const int32 AllyCount = GetCoordinatedNonSupportAllyCount();
 
-	AttackCompletedDelegateHandles.Add(Attacker, Handle);
+	for (const TPair<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment>& Pair : SupportAssignments)
+	{
+		UARPGCombatantComponent* Support = Pair.Key.Get();
+
+		if (!IsValid(Support) || !IsValid(Support->GetCombatantActor()))
+		{
+			continue;
+		}
+
+		if (Pair.Value.State != EARPGCoordinationState::Support)
+		{
+			continue;
+		}
+
+		if (AllyCount < MinimumSupportAllies)
+		{
+			Support->SetSupportOpportunity(false);
+			NextSupportAbilityTimes.Remove(Support);
+			continue;
+		}
+
+		if (Support->HasSupportOpportunity())
+		{
+			continue;
+		}
+
+		double* NextAbilityTime = NextSupportAbilityTimes.Find(Support);
+
+		if (!NextAbilityTime)
+		{
+			ScheduleSupportAbility(
+				Support,
+				CurrentTime,
+				SupportInitialAbilityDelayMin,
+				SupportInitialAbilityDelayMax);
+
+			continue;
+		}
+
+		const float DistanceToAssignment = FVector::Dist2D(
+			Support->GetCombatantActor()->GetActorLocation(),
+			Pair.Value.Location);
+
+		if (DistanceToAssignment > SupportAssignmentSettledDistance)
+		{
+			continue;
+		}
+
+		if (CurrentTime < *NextAbilityTime)
+		{
+			continue;
+		}
+
+		NextSupportAbilityTimes.Remove(Support);
+		Support->SetSupportOpportunity(true);
+	}
+}
+
+void UARPGCombatCoordinationComponent::ScheduleSupportAbility(UARPGCombatantComponent* Attacker,
+                                                              const double CurrentTime, const float MinDelay, const float MaxDelay)
+{
+	if (!IsValid(Attacker))
+	{
+		return;
+	}
+
+	const float SafeMaxDelay = FMath::Max(MinDelay, MaxDelay);
+	const float Delay = FMath::FRandRange(MinDelay, SafeMaxDelay);
+
+	NextSupportAbilityTimes.FindOrAdd(Attacker) = CurrentTime + Delay;
+}
+
+void UARPGCombatCoordinationComponent::HandleSupportAbilityUsed(UARPGCombatantComponent* Attacker)
+{
+	if (!IsValid(Attacker) || Attacker->GetPositioningMode() != EARPGPositioningMode::Support)
+	{
+		return;
+	}
+
+	Attacker->SetSupportOpportunity(false);
+
+	const UWorld* World = GetWorld();
+
+	if (!World)
+	{
+		return;
+	}
+
+	ScheduleSupportAbility(
+		Attacker,
+		World->GetTimeSeconds(),
+		SupportAbilityCooldownMin,
+		SupportAbilityCooldownMax);
+}
+
+void UARPGCombatCoordinationComponent::BindAttackerEvents(UARPGCombatantComponent* Attacker)
+{
+	if (!IsValid(Attacker))
+	{
+		return;
+	}
+
+	if (!AttackCompletedDelegateHandles.Contains(Attacker))
+	{
+		const FDelegateHandle Handle = Attacker->OnAttackCompleted.AddUObject(
+			this, &UARPGCombatCoordinationComponent::HandleAttackerAttackCompleted);
+
+		AttackCompletedDelegateHandles.Add(Attacker, Handle);
+	}
+
+	if (!SupportAbilityUsedDelegateHandles.Contains(Attacker))
+	{
+		const FDelegateHandle Handle = Attacker->OnSupportAbilityUsed.AddUObject(
+			this, &UARPGCombatCoordinationComponent::HandleSupportAbilityUsed);
+
+		SupportAbilityUsedDelegateHandles.Add(Attacker, Handle);
+	}
 }
 
 void UARPGCombatCoordinationComponent::UnbindAttackerEvents(UARPGCombatantComponent* Attacker)
@@ -1725,15 +1856,36 @@ void UARPGCombatCoordinationComponent::UnbindAttackerEvents(UARPGCombatantCompon
 		return;
 	}
 
-	const FDelegateHandle* Handle = AttackCompletedDelegateHandles.Find(Attacker);
-
-	if (!Handle)
+	if (const FDelegateHandle* Handle = AttackCompletedDelegateHandles.Find(Attacker))
 	{
-		return;
+		Attacker->OnAttackCompleted.Remove(*Handle);
+		AttackCompletedDelegateHandles.Remove(Attacker);
 	}
 
-	Attacker->OnAttackCompleted.Remove(*Handle);
-	AttackCompletedDelegateHandles.Remove(Attacker);
+	if (const FDelegateHandle* Handle = SupportAbilityUsedDelegateHandles.Find(Attacker))
+	{
+		Attacker->OnSupportAbilityUsed.Remove(*Handle);
+		SupportAbilityUsedDelegateHandles.Remove(Attacker);
+	}
+}
+
+int32 UARPGCombatCoordinationComponent::GetCoordinatedNonSupportAllyCount() const
+{
+	int32 Count = 0;
+
+	for (const TWeakObjectPtr<UARPGCombatantComponent>& WeakAttacker : CoordinatedAttackers)
+	{
+		const UARPGCombatantComponent* Attacker = WeakAttacker.Get();
+
+		if (!IsValid(Attacker) || Attacker->GetPositioningMode() == EARPGPositioningMode::Support)
+		{
+			continue;
+		}
+
+		++Count;
+	}
+
+	return Count;
 }
 
 FVector UARPGCombatCoordinationComponent::GetMeleeCandidateWorldLocation(const int32 CandidateIndex) const

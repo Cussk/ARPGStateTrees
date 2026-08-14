@@ -43,6 +43,7 @@ EStateTreeRunStatus FARPGStateTreeCombatContextTask::EnterState(FStateTreeExecut
 	UpdateTarget(InstanceData);
 	UpdateCoordination(InstanceData);
 	UpdateAttackOpportunity(InstanceData);
+	UpdateSupportOpportunity(InstanceData);
 
 	TStateTreeInstanceDataStructRef<FInstanceDataType> InstanceDataRef = Context.GetInstanceDataStructRef(*this);
 	const FStateTreeWeakExecutionContext WeakContext = Context.MakeWeakExecutionContext();
@@ -114,6 +115,27 @@ EStateTreeRunStatus FARPGStateTreeCombatContextTask::EnterState(FStateTreeExecut
 			WeakContext.SendEvent(ARPGGameplayTags::StateTreeEvent_AttackOpportunity, FConstStructView(),FName(TEXT("AttackOpportunity")));
 		}
 	});
+	
+	InstanceData.SupportOpportunityChangedHandle = InstanceData.CombatantComponent->OnSupportOpportunityChanged.AddLambda(
+	[InstanceDataRef, WeakContext](const bool bAvailable) mutable
+	{
+		FInstanceDataType* Data = InstanceDataRef.GetPtr();
+
+		if (!Data)
+		{
+			return;
+		}
+
+		Data->bSupportOpportunity = bAvailable;
+
+		if (bAvailable)
+		{
+			WeakContext.SendEvent(
+				ARPGGameplayTags::StateTreeEvent_SupportOpportunity,
+				FConstStructView(),
+				FName(TEXT("SupportOpportunity")));
+		}
+	});
 
 	return EStateTreeRunStatus::Running;
 }
@@ -127,11 +149,13 @@ void FARPGStateTreeCombatContextTask::ExitState(FStateTreeExecutionContext& Cont
 		InstanceData.CombatantComponent->OnTargetChanged.Remove(InstanceData.TargetChangedHandle);
 		InstanceData.CombatantComponent->OnCoordinationChanged.Remove(InstanceData.CoordinationChangedHandle);
 		InstanceData.CombatantComponent->OnAttackOpportunityChanged.Remove(InstanceData.AttackOpportunityChangedHandle);
+		InstanceData.CombatantComponent->OnSupportOpportunityChanged.Remove(InstanceData.SupportOpportunityChangedHandle);
 	}
 
 	InstanceData.TargetChangedHandle.Reset();
 	InstanceData.CoordinationChangedHandle.Reset();
 	InstanceData.AttackOpportunityChangedHandle.Reset();
+	InstanceData.SupportOpportunityChangedHandle.Reset();
 	
 	InstanceData.CombatantComponent = nullptr;
 }
@@ -164,4 +188,10 @@ void FARPGStateTreeCombatContextTask::UpdateCoordination(FInstanceDataType& Inst
 void FARPGStateTreeCombatContextTask::UpdateAttackOpportunity(FInstanceDataType& InstanceData)
 {
 	InstanceData.bTargetInAttackRange = IsValid(InstanceData.CombatantComponent) && InstanceData.CombatantComponent->IsTargetInAttackRange();
+}
+
+void FARPGStateTreeCombatContextTask::UpdateSupportOpportunity(FInstanceDataType& InstanceData)
+{
+	InstanceData.bSupportOpportunity = IsValid(InstanceData.CombatantComponent)
+		&& InstanceData.CombatantComponent->HasSupportOpportunity();
 }

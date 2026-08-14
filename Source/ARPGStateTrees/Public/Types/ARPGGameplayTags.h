@@ -10,5 +10,6 @@ namespace ARPGGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(StateTreeEvent_CombatRoleChanged);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(StateTreeEvent_CombatGoalChanged);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(StateTreeEvent_AttackOpportunity);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(StateTreeEvent_SupportOpportunity);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(StateTreeEvent_RangedPotshot);
 }

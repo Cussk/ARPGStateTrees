@@ -118,6 +118,11 @@ protected:
 
 	void ResetEngagementAttackCount(UARPGCombatantComponent* Attacker);
 	bool IsEngagementRepositionRequested(const UARPGCombatantComponent* Attacker) const;
+	
+	void UpdateSupportOpportunities(double CurrentTime);
+	void ScheduleSupportAbility(UARPGCombatantComponent* Attacker, double CurrentTime, float MinDelay, float MaxDelay);
+	void HandleSupportAbilityUsed(UARPGCombatantComponent* Attacker);
+	int32 GetCoordinatedNonSupportAllyCount() const;
 
 	FVector GetMeleeCandidateWorldLocation(int32 CandidateIndex) const;
 	FVector GetRangedCandidateWorldLocation(int32 CandidateIndex) const;
@@ -233,6 +238,21 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support")
 	float SupportAssignmentSettledDistance = 100.0f;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support", meta = (ClampMin = "1"))
+	int32 MinimumSupportAllies = 3;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support", meta = (ClampMin = "0.0"))
+	float SupportInitialAbilityDelayMin = 1.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support", meta = (ClampMin = "0.0"))
+	float SupportInitialAbilityDelayMax = 2.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support", meta = (ClampMin = "0.0"))
+	float SupportAbilityCooldownMin = 5.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination|Support", meta = (ClampMin = "0.0"))
+	float SupportAbilityCooldownMax = 7.0f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> TargetActor;
@@ -256,6 +276,8 @@ protected:
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FDelegateHandle> AttackCompletedDelegateHandles;
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FARPGCombatAssignment> SupportAssignments;
 	TMap<TWeakObjectPtr<UARPGCombatantComponent>, double> SupportRepositionRequestTimes;
+	TMap<TWeakObjectPtr<UARPGCombatantComponent>, double> NextSupportAbilityTimes;
+	TMap<TWeakObjectPtr<UARPGCombatantComponent>, FDelegateHandle> SupportAbilityUsedDelegateHandles;
 
 	FVector MeleeFieldOrigin = FVector::ZeroVector;
 	FVector MeleePendingQueryOrigin = FVector::ZeroVector;

@@ -62,6 +62,7 @@ void UARPGCombatantComponent::SetCurrentTarget(UARPGCombatantComponent* NewTarge
 	UARPGCombatantComponent* PreviousTarget = CurrentTarget.Get();
 
 	SetTargetInAttackRange(false);
+	SetSupportOpportunity(false);
 
 	CurrentTarget = NewTarget;
 
@@ -160,6 +161,27 @@ UARPGCombatantComponent* UARPGCombatantComponent::GetCurrentTarget() const
 EARPGPositioningMode UARPGCombatantComponent::GetPositioningMode() const
 {
 	return PositioningMode;
+}
+
+void UARPGCombatantComponent::SetSupportOpportunity(const bool bAvailable)
+{
+	if (bSupportOpportunity == bAvailable)
+	{
+		return;
+	}
+
+	bSupportOpportunity = bAvailable;
+	OnSupportOpportunityChanged.Broadcast(bSupportOpportunity);
+}
+
+bool UARPGCombatantComponent::HasSupportOpportunity() const
+{
+	return bSupportOpportunity;
+}
+
+void UARPGCombatantComponent::NotifySupportAbilityUsed()
+{
+	OnSupportAbilityUsed.Broadcast(this);
 }
 
 void UARPGCombatantComponent::NotifyAttackCompleted()
