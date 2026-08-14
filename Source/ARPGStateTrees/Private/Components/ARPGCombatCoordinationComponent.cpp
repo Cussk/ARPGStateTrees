@@ -6,6 +6,33 @@
 #include "EnvironmentQuery/EnvQuery.h"
 #include "EnvironmentQuery/EnvQueryManager.h"
 
+namespace ARPGCombatCoordination
+{
+	struct FCandidateChoice
+	{
+		int32 Index = INDEX_NONE;
+		float Cost = FLT_MAX;
+	};
+
+	int32 SelectRandomTopCandidate(TArray<FCandidateChoice>& Choices, const float TopFraction)
+	{
+		if (Choices.IsEmpty())
+		{
+			return INDEX_NONE;
+		}
+
+		Choices.Sort([](const FCandidateChoice& A, const FCandidateChoice& B)
+		{
+			return A.Cost < B.Cost;
+		});
+
+		const float ClampedFraction = FMath::Clamp(TopFraction, 0.01f, 1.0f);
+		const int32 TopCount = FMath::Clamp(FMath::CeilToInt(Choices.Num() * ClampedFraction), 1, Choices.Num());
+
+		return Choices[FMath::RandRange(0, TopCount - 1)].Index;
+	}
+}
+
 UARPGCombatCoordinationComponent::UARPGCombatCoordinationComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -1288,8 +1315,8 @@ int32 UARPGCombatCoordinationComponent::FindBestEngagementCandidate(const UARPGC
 		ExistingLocation = GetMeleeCandidateWorldLocation(ExistingCandidateIndex);
 	}
 
-	int32 BestIndex = INDEX_NONE;
-	float BestDistanceSquared = FLT_MAX;
+	TArray<ARPGCombatCoordination::FCandidateChoice> Choices;
+	Choices.Reserve(MeleeCandidates.Num());
 
 	for (int32 Index = 0; Index < MeleeCandidates.Num(); ++Index)
 	{
@@ -1311,18 +1338,12 @@ int32 UARPGCombatCoordinationComponent::FindBestEngagementCandidate(const UARPGC
 			continue;
 		}
 
-		const float DistanceSquared = FVector::DistSquared2D(AttackerLocation, CandidateLocation);
-
-		if (DistanceSquared >= BestDistanceSquared)
-		{
-			continue;
-		}
-
-		BestDistanceSquared = DistanceSquared;
-		BestIndex = Index;
+		ARPGCombatCoordination::FCandidateChoice& Choice = Choices.AddDefaulted_GetRef();
+		Choice.Index = Index;
+		Choice.Cost = FVector::DistSquared2D(AttackerLocation, CandidateLocation);
 	}
 
-	return BestIndex;
+	return ARPGCombatCoordination::SelectRandomTopCandidate(Choices, CandidateSelectionTopFraction);
 }
 
 int32 UARPGCombatCoordinationComponent::FindBestPressureCandidate(const UARPGCombatantComponent* Attacker,
@@ -1351,8 +1372,8 @@ int32 UARPGCombatCoordinationComponent::FindBestPressureCandidate(const UARPGCom
 
 	auto FindCandidate = [&](const bool bRequireMovement)
 	{
-		int32 BestIndex = INDEX_NONE;
-		float BestValue = FLT_MAX;
+		TArray<ARPGCombatCoordination::FCandidateChoice> Choices;
+		Choices.Reserve(MeleeCandidates.Num());
 
 		for (int32 Index = 0; Index < MeleeCandidates.Num(); ++Index)
 		{
@@ -1376,18 +1397,13 @@ int32 UARPGCombatCoordinationComponent::FindBestPressureCandidate(const UARPGCom
 			}
 
 			const float TravelDistance = FVector::Dist2D(AttackerLocation, CandidateLocation);
-			const float Value = TargetDistance * PressureRadialWeight + TravelDistance;
 
-			if (Value >= BestValue)
-			{
-				continue;
-			}
-
-			BestValue = Value;
-			BestIndex = Index;
+			ARPGCombatCoordination::FCandidateChoice& Choice = Choices.AddDefaulted_GetRef();
+			Choice.Index = Index;
+			Choice.Cost = TargetDistance * PressureRadialWeight + TravelDistance;
 		}
 
-		return BestIndex;
+		return ARPGCombatCoordination::SelectRandomTopCandidate(Choices, CandidateSelectionTopFraction);
 	};
 
 	if (bForceRetarget)
@@ -1415,8 +1431,8 @@ int32 UARPGCombatCoordinationComponent::FindBestRangedCandidate(const UARPGComba
 	const FVector AttackerLocation = Attacker->GetCombatantActor()->GetActorLocation();
 	const FVector TargetLocation = TargetActor->GetActorLocation();
 
-	int32 BestIndex = INDEX_NONE;
-	float BestDistanceSquared = FLT_MAX;
+	TArray<ARPGCombatCoordination::FCandidateChoice> Choices;
+	Choices.Reserve(RangedCandidates.Num());
 
 	for (int32 Index = 0; Index < RangedCandidates.Num(); ++Index)
 	{
@@ -1449,18 +1465,12 @@ int32 UARPGCombatCoordinationComponent::FindBestRangedCandidate(const UARPGComba
 			continue;
 		}
 
-		const float DistanceSquared = FVector::DistSquared2D(AttackerLocation, CandidateLocation);
-
-		if (DistanceSquared >= BestDistanceSquared)
-		{
-			continue;
-		}
-
-		BestDistanceSquared = DistanceSquared;
-		BestIndex = Index;
+		ARPGCombatCoordination::FCandidateChoice& Choice = Choices.AddDefaulted_GetRef();
+		Choice.Index = Index;
+		Choice.Cost = FVector::DistSquared2D(AttackerLocation, CandidateLocation);
 	}
 
-	return BestIndex;
+	return ARPGCombatCoordination::SelectRandomTopCandidate(Choices, CandidateSelectionTopFraction);
 }
 
 int32 UARPGCombatCoordinationComponent::FindBestSupportCandidate(const UARPGCombatantComponent* Attacker,
@@ -1474,8 +1484,8 @@ int32 UARPGCombatCoordinationComponent::FindBestSupportCandidate(const UARPGComb
 	const FVector AttackerLocation = Attacker->GetCombatantActor()->GetActorLocation();
 	const FVector TargetLocation = TargetActor->GetActorLocation();
 
-	int32 BestIndex = INDEX_NONE;
-	float BestDistanceSquared = FLT_MAX;
+	TArray<ARPGCombatCoordination::FCandidateChoice> Choices;
+	Choices.Reserve(SupportCandidates.Num());
 
 	for (int32 Index = 0; Index < SupportCandidates.Num(); ++Index)
 	{
@@ -1492,18 +1502,12 @@ int32 UARPGCombatCoordinationComponent::FindBestSupportCandidate(const UARPGComb
 			continue;
 		}
 
-		const float DistanceSquared = FVector::DistSquared2D(AttackerLocation, CandidateLocation);
-
-		if (DistanceSquared >= BestDistanceSquared)
-		{
-			continue;
-		}
-
-		BestDistanceSquared = DistanceSquared;
-		BestIndex = Index;
+		ARPGCombatCoordination::FCandidateChoice& Choice = Choices.AddDefaulted_GetRef();
+		Choice.Index = Index;
+		Choice.Cost = FVector::DistSquared2D(AttackerLocation, CandidateLocation);
 	}
 
-	return BestIndex;
+	return ARPGCombatCoordination::SelectRandomTopCandidate(Choices, CandidateSelectionTopFraction);
 }
 
 bool UARPGCombatCoordinationComponent::CanOccupyMeleeCandidate(const UARPGCombatantComponent* Attacker, const int32 CandidateIndex,

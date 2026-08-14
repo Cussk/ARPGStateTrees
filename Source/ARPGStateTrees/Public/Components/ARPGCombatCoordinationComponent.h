@@ -151,6 +151,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination")
 	float AssignmentSeparation = 10.0f;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination", meta = (ClampMin = "0.01", ClampMax = "1.0"))
+	float CandidateSelectionTopFraction = 0.35f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coordination", meta = (ClampMin = "0.05"))
 	float AssignmentReevaluationInterval = 0.35f;
