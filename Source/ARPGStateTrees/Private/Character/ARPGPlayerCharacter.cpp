@@ -12,9 +12,7 @@
 #include "GameFramework/SpringArmComponent.h"
 
 AARPGPlayerCharacter::AARPGPlayerCharacter()
-{
-	PrimaryActorTick.bCanEverTick = false;
-	
+{	
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 	
 	SpringArmComponent = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArmComponent"));

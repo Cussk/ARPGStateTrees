@@ -11,4 +11,7 @@ namespace ARPGGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(StateTreeEvent_AttackOpportunity, "StateTreeEvent.Combat.AttackOpportunity");
 	UE_DEFINE_GAMEPLAY_TAG(StateTreeEvent_SupportOpportunity, "StateTreeEvent.Combat.SupportOpportunity");
 	UE_DEFINE_GAMEPLAY_TAG(StateTreeEvent_RangedPotshot, "StateTreeEvent.Combat.RangedPotshot");
+	UE_DEFINE_GAMEPLAY_TAG(StateTreeEvent_CompanionOwnerChanged, "StateTreeEvent.Companion.OwnerChanged");
+	UE_DEFINE_GAMEPLAY_TAG(StateTreeEvent_CompanionFollowRequired, "StateTreeEvent.Companion.FollowRequired");
+	UE_DEFINE_GAMEPLAY_TAG(StateTreeEvent_CompanionFollowSatisfied, "StateTreeEvent.Companion.FollowSatisfied");
 }

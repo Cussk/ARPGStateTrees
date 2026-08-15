@@ -6,6 +6,9 @@
 
 AARPGCharacterBase::AARPGCharacterBase()
 {
+	PrimaryActorTick.bCanEverTick = false;
+	bReplicates = true;
+	
 	CombatantComponent = CreateDefaultSubobject<UARPGCombatantComponent>(TEXT("CombatantComponent"));
 }
 

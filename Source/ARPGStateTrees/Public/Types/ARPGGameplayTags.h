@@ -12,4 +12,7 @@ namespace ARPGGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(StateTreeEvent_AttackOpportunity);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(StateTreeEvent_SupportOpportunity);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(StateTreeEvent_RangedPotshot);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(StateTreeEvent_CompanionOwnerChanged);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(StateTreeEvent_CompanionFollowRequired);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(StateTreeEvent_CompanionFollowSatisfied);
 }
