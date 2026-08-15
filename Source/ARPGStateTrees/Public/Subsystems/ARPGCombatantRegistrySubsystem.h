@@ -21,6 +21,7 @@ public:
 	void UnregisterCombatant(UARPGCombatantComponent* Combatant);
 
 	UARPGCombatantComponent* FindNearestHostile(const UARPGCombatantComponent* Requester, float SearchRadius) const;
+	UARPGCombatantComponent* FindNearestHostileToLocation(const UARPGCombatantComponent* Requester,	const FVector& SearchOrigin, float SearchRadius) const;
 
 	int32 GetCombatantCount() const;
 

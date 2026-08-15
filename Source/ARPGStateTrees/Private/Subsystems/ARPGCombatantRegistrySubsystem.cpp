@@ -20,14 +20,27 @@ void UARPGCombatantRegistrySubsystem::UnregisterCombatant(UARPGCombatantComponen
 	}
 }
 
-UARPGCombatantComponent* UARPGCombatantRegistrySubsystem::FindNearestHostile(const UARPGCombatantComponent* Requester, const float SearchRadius) const
+UARPGCombatantComponent* UARPGCombatantRegistrySubsystem::FindNearestHostile(
+	const UARPGCombatantComponent* Requester,
+	const float SearchRadius) const
 {
-	if (!IsValid(Requester) || !Requester->GetCombatantActor())
+	if (!IsValid(Requester) || !IsValid(Requester->GetCombatantActor()))
 	{
 		return nullptr;
 	}
 
-	const FVector RequesterLocation = Requester->GetCombatantActor()->GetActorLocation();
+	return FindNearestHostileToLocation(Requester, Requester->GetCombatantActor()->GetActorLocation(), SearchRadius);
+}
+
+UARPGCombatantComponent* UARPGCombatantRegistrySubsystem::FindNearestHostileToLocation(
+	const UARPGCombatantComponent* Requester,
+	const FVector& SearchOrigin,
+	const float SearchRadius) const
+{
+	if (!IsValid(Requester))
+	{
+		return nullptr;
+	}
 
 	UARPGCombatantComponent* BestCombatant = nullptr;
 	float BestDistanceSquared = FMath::Square(SearchRadius);
@@ -36,7 +49,8 @@ UARPGCombatantComponent* UARPGCombatantRegistrySubsystem::FindNearestHostile(con
 	{
 		UARPGCombatantComponent* Combatant = WeakCombatant.Get();
 
-		if (!IsValid(Combatant) || Combatant == Requester || !Combatant->IsTargetable() || !Requester->IsHostileTo(Combatant))
+		if (!IsValid(Combatant) || Combatant == Requester || !Combatant->IsTargetable()
+			|| !Requester->IsHostileTo(Combatant))
 		{
 			continue;
 		}
@@ -48,7 +62,7 @@ UARPGCombatantComponent* UARPGCombatantRegistrySubsystem::FindNearestHostile(con
 			continue;
 		}
 
-		const float DistanceSquared = FVector::DistSquared2D(RequesterLocation, CombatantActor->GetActorLocation());
+		const float DistanceSquared = FVector::DistSquared2D(SearchOrigin, CombatantActor->GetActorLocation());
 
 		if (DistanceSquared >= BestDistanceSquared)
 		{

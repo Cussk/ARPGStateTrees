@@ -6,7 +6,7 @@
 #include "StateTreeTaskBase.h"
 #include "ARPGStateTreePlayMontageTask.generated.h"
 
-class AARPGEnemyCharacter;
+class AARPGCharacterBase;
 class UAnimInstance;
 class UAnimMontage;
 
@@ -16,7 +16,7 @@ struct FARPGStateTreePlayMontageTaskInstanceData
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, Category = "Input")
-	TObjectPtr<AARPGEnemyCharacter> Character;
+	TObjectPtr<AARPGCharacterBase> Character;
 
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UAnimMontage> Montage;

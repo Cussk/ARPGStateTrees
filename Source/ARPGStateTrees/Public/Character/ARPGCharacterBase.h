@@ -7,6 +7,7 @@
 #include "UObject/Object.h"
 #include "ARPGCharacterBase.generated.h"
 
+class UARPGCombatCoordinationComponent;
 class UARPGCombatantComponent;
 /**
  * 
@@ -22,9 +23,15 @@ public:
 	UFUNCTION(BlueprintPure)
 	UARPGCombatantComponent* GetCombatantComponent() const;
 	
+	UFUNCTION(BlueprintPure)
+	UARPGCombatCoordinationComponent* GetCombatCoordinationComponent() const;
+	
 	float PlayMontage(UAnimMontage* Montage, FOnMontageBlendingOutStarted& BlendOutDelegate, float PlayRate = 1.0f) const;
 	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	TObjectPtr<UARPGCombatantComponent> CombatantComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	TObjectPtr<UARPGCombatCoordinationComponent> CombatCoordinationComponent;
 };

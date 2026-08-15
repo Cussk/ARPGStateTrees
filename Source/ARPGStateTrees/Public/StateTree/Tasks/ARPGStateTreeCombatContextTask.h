@@ -7,7 +7,7 @@
 #include "Types/ARPGCombatTypes.h"
 #include "ARPGStateTreeCombatContextTask.generated.h"
 
-class AARPGEnemyAIController;
+class AAIController;
 class UARPGCombatantComponent;
 
 USTRUCT()
@@ -16,7 +16,7 @@ struct FARPGStateTreeCombatContextTaskInstanceData
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, Category = "Input")
-	TObjectPtr<AARPGEnemyAIController> AIController;
+	TObjectPtr<AAIController> AIController;
 
 	UPROPERTY(VisibleAnywhere, Category = "Output")
 	TObjectPtr<AActor> TargetActor;

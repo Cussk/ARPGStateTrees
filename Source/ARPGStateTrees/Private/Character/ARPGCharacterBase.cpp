@@ -3,6 +3,7 @@
 #include "Character/ARPGCharacterBase.h"
 
 #include "Components/ARPGCombatantComponent.h"
+#include "Components/ARPGCombatCoordinationComponent.h"
 
 AARPGCharacterBase::AARPGCharacterBase()
 {
@@ -10,11 +11,17 @@ AARPGCharacterBase::AARPGCharacterBase()
 	bReplicates = true;
 	
 	CombatantComponent = CreateDefaultSubobject<UARPGCombatantComponent>(TEXT("CombatantComponent"));
+	CombatCoordinationComponent = CreateDefaultSubobject<UARPGCombatCoordinationComponent>(TEXT("CombatCoordinationComponent"));
 }
 
 UARPGCombatantComponent* AARPGCharacterBase::GetCombatantComponent() const
 {
 	return CombatantComponent;
+}
+
+UARPGCombatCoordinationComponent* AARPGCharacterBase::GetCombatCoordinationComponent() const
+{
+	return CombatCoordinationComponent;
 }
 
 float AARPGCharacterBase::PlayMontage(UAnimMontage* Montage, FOnMontageBlendingOutStarted& BlendOutDelegate, const float PlayRate) const

@@ -22,7 +22,6 @@ AARPGPlayerCharacter::AARPGPlayerCharacter()
 	CameraComponent->SetupAttachment(SpringArmComponent);
 	
 	NavigationComponent = CreateDefaultSubobject<UARPGNavigationComponent>(TEXT("NavigationComponent"));
-	CombatCoordinationComponent = CreateDefaultSubobject<UARPGCombatCoordinationComponent>(TEXT("CombatCoordinationComponent"));
 	
 	SpringArmComponent->TargetArmLength = 900.0f;
 	SpringArmComponent->SetUsingAbsoluteRotation(true);
@@ -46,9 +45,4 @@ void AARPGPlayerCharacter::BeginPlay()
 UARPGNavigationComponent* AARPGPlayerCharacter::GetARPGNavigationComponent() const
 {
 	return NavigationComponent;
-}
-
-UARPGCombatCoordinationComponent* AARPGPlayerCharacter::GetCombatCoordinationComponent() const
-{
-	return CombatCoordinationComponent;
 }

@@ -22,9 +22,6 @@ public:
 	
 	UFUNCTION(BlueprintPure)
 	UARPGNavigationComponent* GetARPGNavigationComponent() const;
-	
-	UFUNCTION(BlueprintPure)
-	UARPGCombatCoordinationComponent* GetCombatCoordinationComponent() const;
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
@@ -35,7 +32,4 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Navigation")
 	TObjectPtr<UARPGNavigationComponent> NavigationComponent;
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
-	TObjectPtr<UARPGCombatCoordinationComponent> CombatCoordinationComponent;
 };

@@ -4,7 +4,7 @@
 
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
-#include "Character/ARPGEnemyCharacter.h"
+#include "Character/ARPGCharacterBase.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "StateTreeAsyncExecutionContext.h"
 #include "StateTreeExecutionContext.h"

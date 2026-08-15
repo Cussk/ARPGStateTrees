@@ -2,11 +2,11 @@
 
 #include "StateTree/Tasks/ARPGStateTreeCombatContextTask.h"
 
-#include "AI/ARPGEnemyAIController.h"
-#include "Character/ARPGEnemyCharacter.h"
+#include "AIController.h"
 #include "Components/ARPGCombatantComponent.h"
 #include "StateTreeAsyncExecutionContext.h"
 #include "StateTreeExecutionContext.h"
+#include "Character/ARPGCharacterBase.h"
 #include "Types/ARPGGameplayTags.h"
 
 FARPGStateTreeCombatContextTask::FARPGStateTreeCombatContextTask()
@@ -26,14 +26,14 @@ EStateTreeRunStatus FARPGStateTreeCombatContextTask::EnterState(FStateTreeExecut
 		return EStateTreeRunStatus::Failed;
 	}
 
-	const AARPGEnemyCharacter* EnemyCharacter = Cast<AARPGEnemyCharacter>(InstanceData.AIController->GetPawn());
+	const AARPGCharacterBase* Character = Cast<AARPGCharacterBase>(InstanceData.AIController->GetPawn());
 
-	if (!IsValid(EnemyCharacter))
+	if (!IsValid(Character))
 	{
 		return EStateTreeRunStatus::Failed;
 	}
 
-	InstanceData.CombatantComponent = EnemyCharacter->GetCombatantComponent();
+	InstanceData.CombatantComponent = Character->GetCombatantComponent();
 
 	if (!IsValid(InstanceData.CombatantComponent))
 	{
